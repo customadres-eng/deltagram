@@ -182,7 +182,7 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, access_hash, phone, first_name, last_name, username, country_code, created_at, updated_at, verified, support, about, last_seen_at, default_history_ttl_period, is_bot, bot_info_version, premium_expires_at, emoji_status_document_id, emoji_status_until, color_set, color, color_background_emoji_id, profile_color_set, profile_color, profile_color_background_emoji_id, birthday_day, birthday_month, birthday_year, personal_channel_id, deleted_at, deletion_source, deletion_reason, account_delete_at, emoji_status_collectible_id, emoji_status_collectible, linked_community_id, scam, fake FROM users WHERE lower(username) = lower($1) AND username <> '' AND deleted_at IS NULL
+SELECT id, access_hash, phone, first_name, last_name, username, country_code, created_at, updated_at, verified, support, about, last_seen_at, default_history_ttl_period, is_bot, bot_info_version, premium_expires_at, emoji_status_document_id, emoji_status_until, color_set, color, color_background_emoji_id, profile_color_set, profile_color, profile_color_background_emoji_id, birthday_day, birthday_month, birthday_year, personal_channel_id, deleted_at, deletion_source, deletion_reason, account_delete_at, emoji_status_collectible_id, emoji_status_collectible, linked_community_id, scam, fake FROM users WHERE lower(username COLLATE "und-x-icu") = lower($1::text COLLATE "und-x-icu") AND username <> '' AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, lower string) (User, error) {

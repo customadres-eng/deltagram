@@ -17,7 +17,7 @@ WHERE phone = ANY(sqlc.arg(phones)::text[]) AND deleted_at IS NULL
 ORDER BY id;
 
 -- name: GetUserByUsername :one
-SELECT * FROM users WHERE lower(username) = lower($1) AND username <> '' AND deleted_at IS NULL;
+SELECT * FROM users WHERE lower(username COLLATE "und-x-icu") = lower($1::text COLLATE "und-x-icu") AND username <> '' AND deleted_at IS NULL;
 
 -- name: SearchUsers :many
 WITH username_matches AS (

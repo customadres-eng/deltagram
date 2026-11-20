@@ -164,6 +164,42 @@ func TestSetUsernameAllowsOperatorThreeCharacterName(t *testing.T) {
 	}
 }
 
+func TestSetUsernameAllowsCyrillicName(t *testing.T) {
+	ctx := context.Background()
+	repo := newMemoryCommandRepo()
+	users := &fakeUsersService{users: map[int64]domain.User{1001: {ID: 1001, Username: "longname"}}}
+	svc := NewService(Dependencies{Commands: repo, Users: users, Now: fixedNow})
+
+	res, err := svc.SetUsername(ctx, SetUsernameRequest{
+		CommandMeta: CommandMeta{CommandID: "cyrillic-username", Actor: "ops", Reason: "test"},
+		UserID:      1001,
+		Username:    "@Привет",
+	})
+	if err != nil {
+		t.Fatalf("SetUsername Cyrillic: %v", err)
+	}
+	if users.users[1001].Username != "Привет" || users.adminNameCalls != 1 {
+		t.Fatalf("username=%q adminCalls=%d, want Привет/1", users.users[1001].Username, users.adminNameCalls)
+	}
+	if res.Message != "username updated" {
+		t.Fatalf("message=%q, want username updated", res.Message)
+	}
+
+	// Punctuation and two-rune names stay invalid even on the operator path.
+	for _, invalid := range []string{"тест-1", "ёж"} {
+		if _, err := svc.SetUsername(ctx, SetUsernameRequest{
+			CommandMeta: CommandMeta{CommandID: "invalid-cyrillic-" + invalid, Actor: "ops", Reason: "test"},
+			UserID:      1001,
+			Username:    invalid,
+		}); !errors.Is(err, domain.ErrUsernameInvalid) {
+			t.Fatalf("SetUsername(%q) err = %v, want username invalid", invalid, err)
+		}
+	}
+	if users.adminNameCalls != 1 {
+		t.Fatalf("invalid name reached the users service: adminCalls=%d", users.adminNameCalls)
+	}
+}
+
 func TestModerationFlagsRejectImpossibleScamFakeState(t *testing.T) {
 	ctx := context.Background()
 	repo := newMemoryCommandRepo()
@@ -2425,6 +2461,37 @@ func TestMintCollectibleUsernameAllowsThreeCharacterName(t *testing.T) {
 		Username:    "ab", Currency: domain.CollectibleCurrencyTON, Amount: 1,
 	}); !errors.Is(err, domain.ErrUsernameInvalid) {
 		t.Fatalf("two-character mint err = %v, want username invalid", err)
+	}
+	if usernames.mintCalls != 1 {
+		t.Fatalf("invalid name reached the lifecycle: mintCalls=%d", usernames.mintCalls)
+	}
+}
+
+func TestMintCollectibleUsernameAllowsCyrillicName(t *testing.T) {
+	ctx := context.Background()
+	repo := newMemoryCommandRepo()
+	usernames := newFakeCollectibleUsernames()
+	svc := NewService(Dependencies{Commands: repo, Usernames: usernames, Now: fixedNow})
+
+	res, err := svc.MintCollectibleUsername(ctx, MintCollectibleUsernameRequest{
+		CommandMeta: CommandMeta{CommandID: "cyrillic-mint", Actor: "ops", Reason: "operator issue"},
+		Username:    "@ёжик", Currency: domain.CollectibleCurrencyTON, Amount: 1,
+	})
+	if err != nil {
+		t.Fatalf("Cyrillic mint: %v", err)
+	}
+	if usernames.mintCalls != 1 || res.Details["username"] != "ёжик" {
+		t.Fatalf("mintCalls=%d details=%+v, want a minted ёжик", usernames.mintCalls, res.Details)
+	}
+
+	// Punctuation and two-rune names stay invalid even on the operator path.
+	for _, invalid := range []string{"тест-1", "ёж"} {
+		if _, err := svc.MintCollectibleUsername(ctx, MintCollectibleUsernameRequest{
+			CommandMeta: CommandMeta{CommandID: "invalid-cyrillic-mint-" + invalid, Actor: "ops", Reason: "operator issue"},
+			Username:    invalid, Currency: domain.CollectibleCurrencyTON, Amount: 1,
+		}); !errors.Is(err, domain.ErrUsernameInvalid) {
+			t.Fatalf("mint(%q) err = %v, want username invalid", invalid, err)
+		}
 	}
 	if usernames.mintCalls != 1 {
 		t.Fatalf("invalid name reached the lifecycle: mintCalls=%d", usernames.mintCalls)

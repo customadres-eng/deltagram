@@ -314,7 +314,7 @@ func (s *Service) Collectible(ctx context.Context, username string) (domain.Coll
 		return domain.CollectibleUsername{}, err
 	}
 	username = domain.NormalizeUsername(username)
-	if !domain.ValidCollectibleUsername(username) {
+	if !domain.ValidResolvableUsername(username) {
 		return domain.CollectibleUsername{}, domain.ErrUsernameInvalid
 	}
 	return collectibles.CollectibleUsername(ctx, username)

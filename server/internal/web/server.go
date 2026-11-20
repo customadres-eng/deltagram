@@ -1242,7 +1242,7 @@ func validStarGiftSlugPath(slug string) bool {
 }
 
 func validUsernamePath(username string) bool {
-	return domain.ValidCollectibleUsername(domain.NormalizeUsername(username))
+	return domain.ValidResolvableUsername(domain.NormalizeUsername(username))
 }
 
 func linkKind(set domain.StickerSet) string {

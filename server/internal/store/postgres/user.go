@@ -478,7 +478,7 @@ func usernameScalarHolder(ctx context.Context, db sqlcgen.DBTX, usernameLower st
 	err := db.QueryRow(ctx, `
 SELECT id
 FROM users
-WHERE deleted_at IS NULL AND lower(username) = $1
+WHERE deleted_at IS NULL AND lower(username COLLATE "und-x-icu") = $1
 LIMIT 1`, usernameLower).Scan(&userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

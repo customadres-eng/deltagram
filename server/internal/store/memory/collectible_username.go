@@ -96,8 +96,9 @@ func (s *CollectibleUsernameStore) SetEditableUsername(_ context.Context, peer d
 		return s.clearEditableLocked(peer), nil
 	}
 	// peer_usernames has no length CHECK; the 5..32 editable rule lives in the
-	// service layer. Only the character rules are a registry concern.
-	if !domain.ValidCollectibleUsername(username) {
+	// service layer. Only the character rules are a registry concern, and the
+	// registry must accept every name the operator panel can store.
+	if !domain.ValidResolvableUsername(username) {
 		return false, domain.ErrUsernameInvalid
 	}
 	key := strings.ToLower(username)

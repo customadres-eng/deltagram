@@ -104,7 +104,7 @@ func (r *Router) collectibleUsernameInfo(ctx context.Context, userID int64, user
 	name := domain.NormalizeUsername(username)
 	// Syntax first: a name that cannot be a collectible is COLLECTIBLE_INVALID, and
 	// rejecting it here keeps malformed input off the registry.
-	if !domain.ValidCollectibleUsername(name) {
+	if !domain.ValidResolvableUsername(name) {
 		return nil, collectibleInvalidErr()
 	}
 	if r.deps.Usernames == nil {
@@ -211,7 +211,7 @@ func collectibleUsernameErr(err error) error {
 // .toggleUsername. Callers do the permission check first.
 func (r *Router) toggleRegistryUsername(ctx context.Context, peer domain.Peer, username string, active bool) error {
 	name := domain.NormalizeUsername(username)
-	if !domain.ValidCollectibleUsername(name) {
+	if !domain.ValidResolvableUsername(name) {
 		return usernameInvalidErr()
 	}
 	changed, err := r.deps.Usernames.ToggleUsername(ctx, peer, name, active)

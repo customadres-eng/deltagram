@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Collectible (Fragment-style) usernames.
@@ -209,7 +210,7 @@ func (c CollectibleUsername) Owned() bool {
 // Validate enforces the invariants the registry CHECK constraints encode, so an
 // in-memory store and PostgreSQL reject the same shapes.
 func (c CollectibleUsername) Validate() error {
-	if !ValidCollectibleUsername(c.Username) {
+	if !ValidResolvableUsername(c.Username) {
 		return ErrUsernameInvalid
 	}
 	if !c.Status.Valid() {
@@ -307,12 +308,43 @@ func ValidCollectibleUsername(username string) bool {
 }
 
 // ValidAdminUsername reports whether the name is acceptable for an operator
-// issued username. It is the same grammar as the public validators, but with the
-// lower bound relaxed to MinAdminUsernameLength so the telesrv-admin panel can
-// hand out three-character editable and collectible names. It must only be used
-// on operator-authenticated paths.
+// issued username. It relaxes two public constraints for the telesrv-admin
+// panel: the lower bound is MinAdminUsernameLength instead of 5, and Cyrillic
+// letters are allowed. The grammar otherwise matches the public validators (a
+// letter first, then letters, digits or underscores). It must only be used on
+// operator-authenticated paths.
 func ValidAdminUsername(username string) bool {
-	return validUsernameChars(username, MinAdminUsernameLength, MaxCollectibleUsernameLength)
+	runes := []rune(username)
+	if len(runes) < MinAdminUsernameLength || len(runes) > MaxCollectibleUsernameLength {
+		return false
+	}
+	for i, r := range runes {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case unicode.Is(unicode.Cyrillic, r) && unicode.IsLetter(r):
+		case r >= '0' && r <= '9':
+			if i == 0 {
+				return false
+			}
+		case r == '_':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// ValidResolvableUsername reports whether a name may exist in the registry.
+// Operator-issued names can be shorter and Cyrillic, so every lookup, projection
+// and registry mutation of an already stored name must accept the wider grammar
+// produced by ValidAdminUsername. It must never be used to authorise a public
+// username change: those keep the stricter public validators.
+func ValidResolvableUsername(username string) bool {
+	return ValidAdminUsername(username)
 }
 
 func validUsernameChars(username string, minLen, maxLen int) bool {

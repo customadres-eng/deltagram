@@ -138,6 +138,39 @@ func TestAdminUpdateUsernameAllowsThreeCharacterNames(t *testing.T) {
 	}
 }
 
+func TestAdminUpdateUsernameAllowsCyrillicNames(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewUserStore()
+	owner, err := store.Create(ctx, domain.User{AccessHash: 1, Phone: "15550000102", FirstName: "Owner"})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	svc := NewService(store)
+
+	updated, err := svc.AdminUpdateUsername(ctx, owner.ID, "@Привет")
+	if err != nil {
+		t.Fatalf("AdminUpdateUsername Cyrillic: %v", err)
+	}
+	if updated.Username != "Привет" {
+		t.Fatalf("AdminUpdateUsername = %q, want Привет", updated.Username)
+	}
+	// Case variants of a Cyrillic name still collide between different holders.
+	other, err := store.Create(ctx, domain.User{AccessHash: 2, Phone: "15550000103", FirstName: "Other"})
+	if err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+	if _, err := svc.AdminUpdateUsername(ctx, other.ID, "ёжик"); err != nil {
+		t.Fatalf("AdminUpdateUsername second Cyrillic name: %v", err)
+	}
+	if _, err := svc.AdminUpdateUsername(ctx, owner.ID, "Ёжик"); !errors.Is(err, domain.ErrUsernameOccupied) {
+		t.Fatalf("AdminUpdateUsername Cyrillic case variant err = %v, want username occupied", err)
+	}
+	// The public surface keeps rejecting Cyrillic, whatever the length.
+	if _, err := svc.UpdateUsername(ctx, owner.ID, "привет"); !errors.Is(err, domain.ErrUsernameInvalid) {
+		t.Fatalf("UpdateUsername Cyrillic err = %v, want username invalid", err)
+	}
+}
+
 func TestByIDsForViewersRejectsOwnerSetAboveBound(t *testing.T) {
 	svc := NewService(memory.NewUserStore())
 	ids := make([]int64, maxBatchUsers+1)

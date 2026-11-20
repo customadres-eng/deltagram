@@ -701,10 +701,10 @@ func (s *Service) ResolvePublicUsername(ctx context.Context, userID int64, usern
 		return domain.Channel{}, false, domain.ErrChannelInvalid
 	}
 	username = normalizeChannelUsername(username)
-	// Public resolution also covers Fragment-style collectible usernames,
-	// whose protocol minimum is four characters. Channel username mutation
-	// remains on the ordinary 5..32 validation path above.
-	if !domain.ValidCollectibleUsername(username) {
+	// Public resolution also covers operator-issued and Fragment-style
+	// collectible usernames, which may be shorter and Cyrillic. Channel
+	// username mutation remains on the ordinary 5..32 validation path above.
+	if !domain.ValidResolvableUsername(username) {
 		return domain.Channel{}, false, domain.ErrUsernameInvalid
 	}
 	return s.channels.ResolvePublicChannelUsername(ctx, userID, username)
