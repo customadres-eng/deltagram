@@ -270,10 +270,9 @@ public final class DeltagramCards {
                 conn.setReadTimeout(TIMEOUT_MS);
                 conn.setRequestProperty("User-Agent", USER_AGENT);
                 conn.setRequestProperty("Accept", "application/json");
-                if (authorization == null) {
-                    throw new IllegalStateException("DeltaGram authentication unavailable");
+                if (authorization != null) {
+                    conn.setRequestProperty("Authorization", authorization);
                 }
-                conn.setRequestProperty("Authorization", authorization);
                 if (body != null) {
                     conn.setDoOutput(true);
                     conn.setRequestProperty("Content-Type", contentType == null ? "application/octet-stream" : contentType);

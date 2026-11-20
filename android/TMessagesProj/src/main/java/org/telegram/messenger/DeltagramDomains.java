@@ -254,10 +254,9 @@ public final class DeltagramDomains {
                 conn.setReadTimeout(TIMEOUT_MS);
                 conn.setRequestProperty("User-Agent", USER_AGENT);
                 conn.setRequestProperty("Accept", "application/json");
-                if (authorization == null) {
-                    throw new IllegalStateException("DeltaGram authentication unavailable");
+                if (authorization != null) {
+                    conn.setRequestProperty("Authorization", authorization);
                 }
-                conn.setRequestProperty("Authorization", authorization);
                 if (bodyBytes != null) {
                     conn.setDoOutput(true);
                     conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
