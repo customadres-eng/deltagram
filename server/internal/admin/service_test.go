@@ -130,6 +130,40 @@ func TestCreateBotReturnsTokenOnceWithoutPersistingCredential(t *testing.T) {
 	}
 }
 
+func TestSetUsernameAllowsOperatorThreeCharacterName(t *testing.T) {
+	ctx := context.Background()
+	repo := newMemoryCommandRepo()
+	users := &fakeUsersService{users: map[int64]domain.User{1001: {ID: 1001, Username: "longname"}}}
+	svc := NewService(Dependencies{Commands: repo, Users: users, Now: fixedNow})
+
+	res, err := svc.SetUsername(ctx, SetUsernameRequest{
+		CommandMeta: CommandMeta{CommandID: "short-username", Actor: "ops", Reason: "test"},
+		UserID:      1001,
+		Username:    "@abc",
+	})
+	if err != nil {
+		t.Fatalf("SetUsername short name: %v", err)
+	}
+	if users.users[1001].Username != "abc" || users.adminNameCalls != 1 {
+		t.Fatalf("username=%q adminCalls=%d, want abc/1", users.users[1001].Username, users.adminNameCalls)
+	}
+	if res.Message != "username updated" {
+		t.Fatalf("message=%q, want username updated", res.Message)
+	}
+
+	// Two characters stay invalid even on the operator path.
+	if _, err := svc.SetUsername(ctx, SetUsernameRequest{
+		CommandMeta: CommandMeta{CommandID: "two-char-username", Actor: "ops", Reason: "test"},
+		UserID:      1001,
+		Username:    "ab",
+	}); !errors.Is(err, domain.ErrUsernameInvalid) {
+		t.Fatalf("SetUsername two characters err = %v, want username invalid", err)
+	}
+	if users.adminNameCalls != 1 {
+		t.Fatalf("invalid name reached the users service: adminCalls=%d", users.adminNameCalls)
+	}
+}
+
 func TestModerationFlagsRejectImpossibleScamFakeState(t *testing.T) {
 	ctx := context.Background()
 	repo := newMemoryCommandRepo()
@@ -1174,10 +1208,11 @@ func (f *fakeRevoker) RevokeAuthorizationAuthKey(_ context.Context, key [8]byte,
 }
 
 type fakeUsersService struct {
-	users         map[int64]domain.User
-	grantCalls    int
-	lastMonths    int
-	verifiedCalls int
+	users          map[int64]domain.User
+	grantCalls     int
+	lastMonths     int
+	verifiedCalls  int
+	adminNameCalls int
 }
 
 func (f *fakeUsersService) AdminUser(_ context.Context, userID int64) (domain.User, bool, error) {
@@ -1244,6 +1279,11 @@ func (f *fakeUsersService) UpdateUsername(_ context.Context, userID int64, usern
 	u.Username = username
 	f.users[userID] = u
 	return u, nil
+}
+
+func (f *fakeUsersService) AdminUpdateUsername(_ context.Context, userID int64, username string) (domain.User, error) {
+	f.adminNameCalls++
+	return f.UpdateUsername(context.Background(), userID, username)
 }
 
 func (f *fakeUsersService) UpdateColor(_ context.Context, userID int64, forProfile bool, color domain.PeerColor) (domain.User, error) {
@@ -2359,6 +2399,35 @@ func TestMintCollectibleUsernameDryRunExecuteAndIdempotency(t *testing.T) {
 	}
 	if occupied.Code != CodeUsernameOccupied {
 		t.Fatalf("duplicate result code=%q, want the stable token %s", occupied.Code, CodeUsernameOccupied)
+	}
+}
+
+func TestMintCollectibleUsernameAllowsThreeCharacterName(t *testing.T) {
+	ctx := context.Background()
+	repo := newMemoryCommandRepo()
+	usernames := newFakeCollectibleUsernames()
+	svc := NewService(Dependencies{Commands: repo, Usernames: usernames, Now: fixedNow})
+
+	res, err := svc.MintCollectibleUsername(ctx, MintCollectibleUsernameRequest{
+		CommandMeta: CommandMeta{CommandID: "short-mint", Actor: "ops", Reason: "operator issue"},
+		Username:    "@ab_", Currency: domain.CollectibleCurrencyTON, Amount: 1,
+	})
+	if err != nil {
+		t.Fatalf("three-character mint: %v", err)
+	}
+	if usernames.mintCalls != 1 || res.Details["username"] != "ab_" {
+		t.Fatalf("mintCalls=%d details=%+v, want a minted ab_", usernames.mintCalls, res.Details)
+	}
+
+	// Two characters stay invalid even on the operator path.
+	if _, err := svc.MintCollectibleUsername(ctx, MintCollectibleUsernameRequest{
+		CommandMeta: CommandMeta{CommandID: "two-char-mint", Actor: "ops", Reason: "operator issue"},
+		Username:    "ab", Currency: domain.CollectibleCurrencyTON, Amount: 1,
+	}); !errors.Is(err, domain.ErrUsernameInvalid) {
+		t.Fatalf("two-character mint err = %v, want username invalid", err)
+	}
+	if usernames.mintCalls != 1 {
+		t.Fatalf("invalid name reached the lifecycle: mintCalls=%d", usernames.mintCalls)
 	}
 }
 

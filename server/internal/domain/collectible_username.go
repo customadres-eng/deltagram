@@ -22,6 +22,11 @@ import (
 const (
 	MinCollectibleUsernameLength = 4
 	MaxCollectibleUsernameLength = 32
+	// MinAdminUsernameLength is the operator-only lower bound used by the
+	// telesrv-admin panel when it issues an editable or collectible username.
+	// Public surfaces keep their own minimums (5 for the editable slot, 4 for
+	// collectible mints); the panel may assign three-character names.
+	MinAdminUsernameLength = 3
 	// MaxPeerCollectibleUsernames bounds the collectible rows a single peer can
 	// hold. The TL usernames vector is rendered in full by clients, so the bound
 	// keeps both the projection cost and the rendered list finite.
@@ -301,6 +306,15 @@ func ValidCollectibleUsername(username string) bool {
 	return validUsernameChars(username, MinCollectibleUsernameLength, MaxCollectibleUsernameLength)
 }
 
+// ValidAdminUsername reports whether the name is acceptable for an operator
+// issued username. It is the same grammar as the public validators, but with the
+// lower bound relaxed to MinAdminUsernameLength so the telesrv-admin panel can
+// hand out three-character editable and collectible names. It must only be used
+// on operator-authenticated paths.
+func ValidAdminUsername(username string) bool {
+	return validUsernameChars(username, MinAdminUsernameLength, MaxCollectibleUsernameLength)
+}
+
 func validUsernameChars(username string, minLen, maxLen int) bool {
 	if len(username) < minLen || len(username) > maxLen {
 		return false
@@ -522,7 +536,7 @@ type MintCollectibleUsernameRequest struct {
 
 // Validate normalises nothing and only checks; callers normalise first.
 func (r MintCollectibleUsernameRequest) Validate() error {
-	if !ValidCollectibleUsername(r.Username) {
+	if !ValidAdminUsername(r.Username) {
 		return ErrUsernameInvalid
 	}
 	if r.Owner.Type != "" && !validCollectibleOwner(r.Owner) {
@@ -558,7 +572,7 @@ type TransferCollectibleUsernameRequest struct {
 
 // Validate checks the request shape.
 func (r TransferCollectibleUsernameRequest) Validate() error {
-	if !ValidCollectibleUsername(r.Username) {
+	if !ValidAdminUsername(r.Username) {
 		return ErrUsernameInvalid
 	}
 	if !validCollectibleOwner(r.To) {
@@ -588,7 +602,7 @@ type RevokeCollectibleUsernameRequest struct {
 
 // Validate checks the request shape.
 func (r RevokeCollectibleUsernameRequest) Validate() error {
-	if !ValidCollectibleUsername(r.Username) {
+	if !ValidAdminUsername(r.Username) {
 		return ErrUsernameInvalid
 	}
 	if len(r.Reason) > MaxCollectibleUsernameReasonLength {
@@ -615,7 +629,7 @@ type DeleteCollectibleUsernameRequest struct {
 
 // Validate checks the request shape.
 func (r DeleteCollectibleUsernameRequest) Validate() error {
-	if !ValidCollectibleUsername(r.Username) {
+	if !ValidAdminUsername(r.Username) {
 		return ErrUsernameInvalid
 	}
 	if len(r.Reason) > MaxCollectibleUsernameReasonLength {

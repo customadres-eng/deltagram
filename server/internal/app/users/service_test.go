@@ -112,6 +112,32 @@ func TestServiceUsernameLifecycle(t *testing.T) {
 	}
 }
 
+func TestAdminUpdateUsernameAllowsThreeCharacterNames(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewUserStore()
+	owner, err := store.Create(ctx, domain.User{AccessHash: 1, Phone: "15550000101", FirstName: "Owner"})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	svc := NewService(store)
+
+	updated, err := svc.AdminUpdateUsername(ctx, owner.ID, "@ab_")
+	if err != nil {
+		t.Fatalf("AdminUpdateUsername short name: %v", err)
+	}
+	if updated.Username != "ab_" {
+		t.Fatalf("AdminUpdateUsername = %q, want ab_", updated.Username)
+	}
+
+	if _, err := svc.AdminUpdateUsername(ctx, owner.ID, "ab"); !errors.Is(err, domain.ErrUsernameInvalid) {
+		t.Fatalf("AdminUpdateUsername two characters err = %v, want username invalid", err)
+	}
+	// The public surface keeps its five-character minimum.
+	if _, err := svc.UpdateUsername(ctx, owner.ID, "abc"); !errors.Is(err, domain.ErrUsernameInvalid) {
+		t.Fatalf("UpdateUsername three characters err = %v, want username invalid", err)
+	}
+}
+
 func TestByIDsForViewersRejectsOwnerSetAboveBound(t *testing.T) {
 	svc := NewService(memory.NewUserStore())
 	ids := make([]int64, maxBatchUsers+1)

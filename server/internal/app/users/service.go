@@ -388,13 +388,25 @@ func (s *Service) checkUsernameAvailable(ctx context.Context, selfID int64, user
 
 // UpdateUsername 修改当前用户的主 username。空字符串表示删除 username。
 func (s *Service) UpdateUsername(ctx context.Context, userID int64, username string) (domain.User, error) {
+	return s.updateUsername(ctx, userID, username, validUsername)
+}
+
+// AdminUpdateUsername force-sets the editable username from an operator-only
+// surface (the telesrv-admin panel). It keeps the public character rules but
+// accepts names below the five-character minimum, down to
+// domain.MinAdminUsernameLength, so operators can assign three-character names.
+func (s *Service) AdminUpdateUsername(ctx context.Context, userID int64, username string) (domain.User, error) {
+	return s.updateUsername(ctx, userID, username, domain.ValidAdminUsername)
+}
+
+func (s *Service) updateUsername(ctx context.Context, userID int64, username string, valid func(string) bool) (domain.User, error) {
 	self, err := s.loadSelf(ctx, userID)
 	if err != nil {
 		return domain.User{}, err
 	}
 	username = normalizeUsername(username)
 	if username != "" {
-		if !validUsername(username) {
+		if !valid(username) {
 			return domain.User{}, domain.ErrUsernameInvalid
 		}
 		ok, err := s.checkUsernameAvailable(ctx, self.ID, username)

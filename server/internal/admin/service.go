@@ -2253,8 +2253,16 @@ func (s *Service) GiveGift(ctx context.Context, req GiveGiftRequest) (CommandRes
 	})
 }
 
+// AdminUsernameSetter is implemented by the users service to force-set a
+// username without the public 5-character minimum. The admin panel uses it so
+// operators can assign three-character names.
+type AdminUsernameSetter interface {
+	AdminUpdateUsername(ctx context.Context, userID int64, username string) (domain.User, error)
+}
+
 // SetUsername force-sets or clears (empty) a user/bot username. Format and
-// availability are validated by the users service.
+// availability are validated by the users service. Operator-issued names may be
+// shorter than the public minimum, down to domain.MinAdminUsernameLength.
 func (s *Service) SetUsername(ctx context.Context, req SetUsernameRequest) (CommandResult, error) {
 	if req.UserID <= 0 {
 		return CommandResult{}, fmt.Errorf("user_id is required")
@@ -2263,6 +2271,9 @@ func (s *Service) SetUsername(ctx context.Context, req SetUsernameRequest) (Comm
 		return CommandResult{}, fmt.Errorf("admin user dependency is not configured")
 	}
 	username := strings.TrimSpace(strings.TrimPrefix(req.Username, "@"))
+	if username != "" && !domain.ValidAdminUsername(username) {
+		return CommandResult{}, codedError(CodeUsernameInvalid, domain.ErrUsernameInvalid)
+	}
 	req.Username = username
 	return s.runCommand(ctx, req.CommandMeta, ActionSetUsername, req.UserID, domain.Peer{}, req, func() (CommandResult, error) {
 		u, found, err := s.users.AdminUser(ctx, req.UserID)
@@ -2276,7 +2287,12 @@ func (s *Service) SetUsername(ctx context.Context, req SetUsernameRequest) (Comm
 		if req.DryRun {
 			return CommandResult{Message: "dry-run completed", Details: details}, nil
 		}
-		updated, err := s.users.UpdateUsername(ctx, req.UserID, username)
+		var updated domain.User
+		if setter, ok := s.users.(AdminUsernameSetter); ok {
+			updated, err = setter.AdminUpdateUsername(ctx, req.UserID, username)
+		} else {
+			updated, err = s.users.UpdateUsername(ctx, req.UserID, username)
+		}
 		if err != nil {
 			return CommandResult{}, err
 		}
@@ -2747,7 +2763,7 @@ func (s *Service) MintCollectibleUsername(ctx context.Context, req MintCollectib
 		return CommandResult{}, fmt.Errorf("admin collectible username dependency is not configured")
 	}
 	req.Username = domain.NormalizeUsername(req.Username)
-	if !domain.ValidCollectibleUsername(req.Username) {
+	if !domain.ValidAdminUsername(req.Username) {
 		return CommandResult{}, codedError(CodeUsernameInvalid, domain.ErrUsernameInvalid)
 	}
 	owner, err := collectibleOwnerPeer(req.OwnerUserID, req.OwnerChannelID)
@@ -2828,7 +2844,7 @@ func (s *Service) TransferCollectibleUsername(ctx context.Context, req TransferC
 		return CommandResult{}, fmt.Errorf("admin collectible username dependency is not configured")
 	}
 	req.Username = domain.NormalizeUsername(req.Username)
-	if !domain.ValidCollectibleUsername(req.Username) {
+	if !domain.ValidAdminUsername(req.Username) {
 		return CommandResult{}, codedError(CodeUsernameInvalid, domain.ErrUsernameInvalid)
 	}
 	to, err := collectibleOwnerPeer(req.ToUserID, req.ToChannelID)
@@ -2890,7 +2906,7 @@ func (s *Service) RevokeCollectibleUsername(ctx context.Context, req RevokeColle
 		return CommandResult{}, fmt.Errorf("admin collectible username dependency is not configured")
 	}
 	req.Username = domain.NormalizeUsername(req.Username)
-	if !domain.ValidCollectibleUsername(req.Username) {
+	if !domain.ValidAdminUsername(req.Username) {
 		return CommandResult{}, codedError(CodeUsernameInvalid, domain.ErrUsernameInvalid)
 	}
 	if req.ExpectedOwnerUserID < 0 {
@@ -2947,7 +2963,7 @@ func (s *Service) DeleteCollectibleUsername(ctx context.Context, req DeleteColle
 		return CommandResult{}, fmt.Errorf("admin collectible username dependency is not configured")
 	}
 	req.Username = domain.NormalizeUsername(req.Username)
-	if !domain.ValidCollectibleUsername(req.Username) {
+	if !domain.ValidAdminUsername(req.Username) {
 		return CommandResult{}, codedError(CodeUsernameInvalid, domain.ErrUsernameInvalid)
 	}
 	return s.runCommand(ctx, req.CommandMeta, ActionDeleteCollectibleUsername, 0, domain.Peer{}, req, func() (CommandResult, error) {
