@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07080c">
+<meta name="color-scheme" content="dark">
+<title>Delta Casino</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <div class="boot">
+    <div class="boot-mark"><svg class="boot-crown"><use href="#i-crown"></use></svg></div>
+    <div class="boot-text">DELTA CASINO</div>
+    <div class="boot-dots"><i></i><i></i><i></i></div>
+  </div>
+</div>
+
+<nav class="nav" id="nav">
+  <button class="nav-btn active" data-act="go" data-view="lobby" data-nav="lobby">
+    <svg class="ic"><use href="#i-grid"></use></svg><span>Игры</span>
+  </button>
+  <button class="nav-btn" data-act="go" data-view="wallet" data-nav="wallet">
+    <svg class="ic"><use href="#i-wallet"></use></svg><span>Кошелёк</span>
+  </button>
+  <button class="nav-btn" data-act="go" data-view="nft" data-nav="nft">
+    <svg class="ic"><use href="#i-gift"></use></svg><span>NFT</span>
+  </button>
+  <button class="nav-btn" data-act="go" data-view="history" data-nav="history">
+    <svg class="ic"><use href="#i-clock"></use></svg><span>История</span>
+  </button>
+</nav>
+
+<div class="sheet-root" id="sheetRoot"></div>
+<div class="toast" id="toast"></div>
+
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-crown" viewBox="0 0 64 64">
+    <path d="M7 21l12 10L32 12l13 19 12-10-5 27H12z" fill="currentColor"/>
+    <rect x="12" y="50" width="40" height="6" rx="3" fill="currentColor" opacity=".55"/>
+  </symbol>
+  <symbol id="i-star" viewBox="0 0 24 24">
+    <path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 17.4l-5.8 3 1.1-6.4L2.6 9.4l6.5-.9z" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24">
+    <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24">
+    <rect x="3.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <rect x="13.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <rect x="3.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <rect x="13.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/>
+  </symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24">
+    <rect x="3" y="6" width="18" height="13" rx="4" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <path d="M3 10h18" stroke="currentColor" stroke-width="1.8"/>
+    <circle cx="17" cy="14.5" r="1.4" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24">
+    <rect x="3.5" y="9" width="17" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <path d="M3 13h18M12 9v11.5" stroke="currentColor" stroke-width="1.8"/>
+    <path d="M12 9S10.8 4 8 4a2.2 2.2 0 000 5h4zM12 9s1.2-5 4-5a2.2 2.2 0 010 5h-4z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <path d="M12 7.2V12l3.4 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24">
+    <path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24">
+    <path d="M5.5 12h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-close" viewBox="0 0 24 24">
+    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24">
+    <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-arrow-up-right" viewBox="0 0 24 24">
+    <path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24">
+    <path d="M12 3l7.5 3v5.2c0 4.5-3.1 8.2-7.5 9.8-4.4-1.6-7.5-5.3-7.5-9.8V6z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+    <path d="M8.7 12.1l2.3 2.3 4.4-4.5" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24">
+    <path d="M13.2 2.5L5 13.4h6l-1.2 8.1L18 10.4h-6z" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    <path d="M8 12.2l2.7 2.7L16.5 9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24">
+    <path d="M12 3c3 2 4.5 6 4.5 10 0 2-.5 4-1 6l-1.5 2h-4l-1.5-2c-.5-2-1-4-1-6C7.5 9 9 5 12 3z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+    <circle cx="12" cy="11" r="2" fill="currentColor"/>
+    <path d="M8.5 21h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <path d="M12 7.5c2.4 0 3.4 1 3.4 2.3 0 1.4-1.2 2-3.4 2-2.4 0-3.4 1.1-3.4 2.4 0 1.3 1.2 2.3 3.4 2.3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M12 6v1.5M12 16.5V18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24">
+    <path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24">
+    <path d="M7 4h10v5a5 5 0 01-10 0z" stroke="currentColor" stroke-width="1.7" fill="none"/>
+    <path d="M7 5H4.5a2 2 0 000 4H7M17 5h2.5a2 2 0 010 4H17" stroke="currentColor" stroke-width="1.7" fill="none"/>
+    <path d="M12 14v3M8 20h8M10 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24">
+    <rect x="5" y="10.5" width="14" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24">
+    <path d="M20 12a8 8 0 11-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.7" fill="none"/>
+    <path d="M12 11v5M12 8v.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24">
+    <path d="M12 4v13M6 11l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24">
+    <path d="M12 20V7M6 13l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <symbol id="s-cherry" viewBox="0 0 64 64">
+    <path d="M33 13c7 0 13 5 15 13" stroke="#3fae5a" stroke-width="4.4" fill="none" stroke-linecap="round"/>
+    <path d="M33 13c-5 7-9 13-11 21" stroke="#3fae5a" stroke-width="4.4" fill="none" stroke-linecap="round"/>
+    <circle cx="21" cy="43" r="12" fill="#e5344a"/>
+    <circle cx="43" cy="47" r="12" fill="#ff465c"/>
+    <circle cx="17" cy="38" r="4" fill="#ff9aa5" opacity=".85"/>
+    <circle cx="39" cy="42" r="4" fill="#ff9aa5" opacity=".7"/>
+  </symbol>
+  <symbol id="s-lemon" viewBox="0 0 64 64">
+    <ellipse cx="32" cy="39" rx="19" ry="15" fill="#ffd23f" transform="rotate(-18 32 39)"/>
+    <ellipse cx="36" cy="33" rx="9" ry="4.5" fill="#fff1ad" opacity=".75" transform="rotate(-18 36 33)"/>
+    <path d="M45 23c5-7 12-8 15-7-1 7-6 11-12 12" fill="#4fbf6a"/>
+    <path d="M45 23l3 5" stroke="#2f8f4c" stroke-width="2"/>
+  </symbol>
+  <symbol id="s-grape" viewBox="0 0 64 64">
+    <path d="M32 9c3 5 3 10 0 15" stroke="#5cbf72" stroke-width="4.4" fill="none" stroke-linecap="round"/>
+    <path d="M34 15c5-4 10-4 13-2-3 5-7 7-11 6" fill="#4fbf6a"/>
+    <circle cx="24" cy="31" r="7" fill="#9a63f2"/><circle cx="38" cy="31" r="7" fill="#b07bff"/>
+    <circle cx="18" cy="43" r="7" fill="#834ee0"/><circle cx="31" cy="43" r="7" fill="#a96bff"/><circle cx="44" cy="43" r="7" fill="#9a63f2"/>
+    <circle cx="25" cy="54" r="6.4" fill="#7d45d8"/><circle cx="39" cy="54" r="6.4" fill="#9257ec"/>
+  </symbol>
+  <symbol id="s-orange" viewBox="0 0 64 64">
+    <circle cx="32" cy="39" r="19" fill="#ff9f2e"/>
+    <circle cx="25" cy="31" r="5.5" fill="#ffd79b" opacity=".75"/>
+    <path d="M32 20c2-6 8-9 14-8-1 6-6 10-12 10" fill="#4fbf6a"/>
+    <path d="M32 20l3 6" stroke="#2f8f4c" stroke-width="2.4"/>
+  </symbol>
+  <symbol id="s-bell" viewBox="0 0 64 64">
+    <path d="M32 10c-10.5 0-17 8-17 18.5V38l-4.5 6.5h43L49 38v-9.5C49 18 42.5 10 32 10z" fill="#ffcf4d"/>
+    <path d="M32 10c-4 0-7 3-7 7h14c0-4-3-7-7-7z" fill="#ffe08a"/>
+    <rect x="25" y="46" width="14" height="5.5" rx="2.7" fill="#e0a52d"/>
+    <circle cx="32" cy="55" r="4.4" fill="#ffcf4d"/>
+    <circle cx="24" cy="26" r="4" fill="#ffe9a8" opacity=".7"/>
+  </symbol>
+  <symbol id="s-star" viewBox="0 0 64 64">
+    <path d="M32 7l7.6 15.4 17 2.4-12.3 12 2.9 17-15.2-8-15.2 8 2.9-17-12.3-12 17-2.4z" fill="#ffd25c"/>
+    <path d="M32 13l5 10.2 11.2 1.6-8.1 7.9 1.9 11.2L32 38.6l-10 5.3 1.9-11.2-8.1-7.9L27 23.2z" fill="#ffe9a8" opacity=".55"/>
+  </symbol>
+  <symbol id="s-seven" viewBox="0 0 64 64">
+    <polygon points="14,13 50,13 50,21 33,56 23,56 39,21 14,21" fill="#ff465c"/>
+    <polygon points="18,16 46,16 46,19 30,53 27,53 42,19 18,19" fill="#ff8d99" opacity=".55"/>
+  </symbol>
+  <symbol id="s-wild" viewBox="0 0 64 64">
+    <path d="M32 6l26 26-26 26L6 32z" fill="#8b6cff"/>
+    <path d="M32 14l18 18-18 18-18-18z" fill="#a88dff"/>
+    <path d="M19 27l5 13 8-10 8 10 5-13" stroke="#fff" stroke-width="3.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <symbol id="g-gem-blue" viewBox="0 0 64 64">
+    <path d="M32 6l14 12v16L32 58 18 34V18z" fill="#3d8bff"/>
+    <path d="M32 6l14 12-14 8-14-8z" fill="#8fc0ff"/>
+    <path d="M32 26l14-8v16L32 58z" fill="#2a63c4" opacity=".85"/>
+    <path d="M32 26v32L18 34V18z" fill="#5aa0ff" opacity=".6"/>
+  </symbol>
+  <symbol id="g-gem-green" viewBox="0 0 64 64">
+    <path d="M32 6l14 12v16L32 58 18 34V18z" fill="#2fd48a"/>
+    <path d="M32 6l14 12-14 8-14-8z" fill="#8ff0c4"/>
+    <path d="M32 26l14-8v16L32 58z" fill="#1a9a61" opacity=".85"/>
+    <path d="M32 26v32L18 34V18z" fill="#4fe0a0" opacity=".6"/>
+  </symbol>
+  <symbol id="g-gem-purple" viewBox="0 0 64 64">
+    <path d="M32 6l14 12v16L32 58 18 34V18z" fill="#9a63f2"/>
+    <path d="M32 6l14 12-14 8-14-8z" fill="#cdb2ff"/>
+    <path d="M32 26l14-8v16L32 58z" fill="#6a3ec0" opacity=".85"/>
+    <path d="M32 26v32L18 34V18z" fill="#b184ff" opacity=".6"/>
+  </symbol>
+  <symbol id="g-gem-red" viewBox="0 0 64 64">
+    <path d="M32 6l14 12v16L32 58 18 34V18z" fill="#ff465c"/>
+    <path d="M32 6l14 12-14 8-14-8z" fill="#ffa3ad"/>
+    <path d="M32 26l14-8v16L32 58z" fill="#c02437" opacity=".85"/>
+    <path d="M32 26v32L18 34V18z" fill="#ff6f80" opacity=".6"/>
+  </symbol>
+  <symbol id="g-gem-gold" viewBox="0 0 64 64">
+    <path d="M32 6l14 12v16L32 58 18 34V18z" fill="#e9c77c"/>
+    <path d="M32 6l14 12-14 8-14-8z" fill="#fff4cd"/>
+    <path d="M32 26l14-8v16L32 58z" fill="#b8892f" opacity=".85"/>
+    <path d="M32 26v32L18 34V18z" fill="#f5dda0" opacity=".6"/>
+  </symbol>
+  <symbol id="g-crown" viewBox="0 0 64 64">
+    <path d="M8 44l-2-26 14 12L32 10l12 20 14-12-2 26z" fill="#e9c77c"/>
+    <path d="M8 44h48v8a3 3 0 01-3 3H11a3 3 0 01-3-3z" fill="#c69a4a"/>
+    <circle cx="32" cy="22" r="4" fill="#fff4cd"/>
+    <circle cx="14" cy="31" r="3" fill="#fff4cd"/>
+    <circle cx="50" cy="31" r="3" fill="#fff4cd"/>
+  </symbol>
+  <symbol id="g-hourglass" viewBox="0 0 64 64">
+    <rect x="17" y="6" width="30" height="6" rx="2" fill="#e9c77c"/>
+    <rect x="17" y="52" width="30" height="6" rx="2" fill="#e9c77c"/>
+    <path d="M21 12h22c0 12-8 16-8 20s8 8 8 20H21c0-12 8-16 8-20s-8-8-8-20z" fill="#2b3245" stroke="#e9c77c" stroke-width="2.4"/>
+    <path d="M32 34c-5 3-7 8-7 14h14c0-6-2-11-7-14z" fill="#e9c77c"/>
+  </symbol>
+  <symbol id="g-ring" viewBox="0 0 64 64">
+    <circle cx="32" cy="38" r="18" fill="none" stroke="#e9c77c" stroke-width="7"/>
+    <circle cx="32" cy="38" r="18" fill="none" stroke="#fff4cd" stroke-width="2" opacity=".7"/>
+    <path d="M32 4l10 12-10 10-10-10z" fill="#7be0ff"/>
+    <path d="M32 8l6 8-6 6-6-6z" fill="#d8fbff"/>
+  </symbol>
+  <symbol id="g-orb" viewBox="0 0 64 64">
+    <circle cx="32" cy="34" r="22" fill="url(#orbG)"/>
+    <circle cx="32" cy="34" r="22" fill="none" stroke="#fff3c4" stroke-width="2" opacity=".8"/>
+    <circle cx="24" cy="26" r="7" fill="#fff" opacity=".35"/>
+    <path d="M32 44l4-9h-8l4-9" stroke="#7a4d00" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".35"/>
+    <defs>
+      <radialGradient id="orbG" cx="35%" cy="30%">
+        <stop offset="0" stop-color="#fff6cf"/>
+        <stop offset="55%" stop-color="#f2c85e"/>
+        <stop offset="100%" stop-color="#a5711c"/>
+      </radialGradient>
+    </defs>
+  </symbol>
+
+  <symbol id="i-gem" viewBox="0 0 64 64">    <path d="M32 9l16 12-6 26-10 9-10-9-6-26z" fill="#22d38a"/>
+    <path d="M32 9l4 13-4 34-4-34z" fill="#8bf3ca" opacity=".75"/>
+    <path d="M16 21h36" stroke="#0d7a4d" stroke-width="2.4"/>
+    <path d="M22 21l10-12 10 12" stroke="#0d7a4d" stroke-width="2.4" fill="none" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-bomb" viewBox="0 0 64 64">
+    <circle cx="29" cy="39" r="17" fill="#2c3140"/>
+    <circle cx="23" cy="33" r="5.5" fill="#4b5468"/>
+    <path d="M40 24c4-6 9-8 14-7" stroke="#e9c77c" stroke-width="4.4" fill="none" stroke-linecap="round"/>
+    <circle cx="55" cy="16" r="3.4" fill="#ffb03a"/>
+    <circle cx="55" cy="16" r="6.4" fill="#ffb03a" opacity=".25"/>
+  </symbol>
+</svg>
+
+<script src="/lottie.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

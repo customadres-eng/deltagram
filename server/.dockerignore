@@ -1,0 +1,16 @@
+# Build artifacts and local dependencies are rebuilt inside the image.
+**/node_modules
+cmd/deltament/web/dist
+cmd/telesrv-admin/web/dist
+
+# Large local data that is never copied by the Dockerfile.
+*.apk
+backups
+giftpacks-*
+sticker-seed-v2.zip
+
+# Never send deployment secrets or local backups into the build context.
+**/.env
+**/.env.*
+**/*.bak.*
+**/.deltament-operator-key

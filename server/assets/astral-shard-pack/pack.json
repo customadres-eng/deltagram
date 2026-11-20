@@ -1,0 +1,35 @@
+{
+  "pack_name": "Astral Shard",
+  "author": "gramsrv",
+  "gifts": [
+    {
+      "id_slug": "astral-shard",
+      "title": "Astral Shard",
+      "stars": 250,
+      "convert_stars": 125,
+      "base_animation": "astral-shard.tgs",
+      "upgrade": {
+        "upgrade_stars": 125,
+        "supply_total": 1000,
+        "slug_prefix": "astral-shard",
+        "models": [
+          {"name": "Nebula", "animation": "model-nebula.tgs", "permille": 500},
+          {"name": "Quasar", "animation": "model-quasar.tgs", "permille": 300},
+          {"name": "Supernova", "animation": "model-supernova.tgs", "permille": 200},
+          {"name": "Astral Core", "animation": "model-core.tgs", "permille": 0, "crafted": true, "rarity": "legendary"}
+        ],
+        "patterns": [
+          {"name": "Orbit", "animation": "pattern-orbit.tgs", "permille": 500},
+          {"name": "Stardust", "animation": "pattern-stardust.tgs", "permille": 300},
+          {"name": "Eclipse", "animation": "pattern-eclipse.tgs", "permille": 200}
+        ],
+        "backdrops": [
+          {"name": "Deep Space", "center": "#10152E", "edge": "#050611", "pattern": "#6D5CFF", "text": "#FFFFFF", "permille": 450},
+          {"name": "Aurora", "center": "#143B59", "edge": "#07151F", "pattern": "#48E0C4", "text": "#FFFFFF", "permille": 300},
+          {"name": "Solar Flare", "center": "#5B2416", "edge": "#1A0805", "pattern": "#FFB347", "text": "#FFF4D6", "permille": 200},
+          {"name": "Void", "center": "#17121F", "edge": "#030205", "pattern": "#C06CFF", "text": "#FFFFFF", "permille": 50}
+        ]
+      }
+    }
+  ]
+}

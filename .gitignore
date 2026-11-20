@@ -1,0 +1,30 @@
+# Android build artifacts
+android/.gradle/
+android/**/build/
+android/**/.cxx/
+android/**/.externalNativeBuild/
+android/local.properties
+android/captures/
+android/.idea/
+android/**/*.apk
+android/**/*.aab
+android/**/*.jks
+android/**/*.keystore
+
+# Server build/runtime
+server/.gomod/
+server/backups/
+server/data/
+server/deliverables/
+server/**/node_modules/
+server/**/dist/
+server/deploy/docker/.env
+server/deploy/docker/.env.bak-*
+server/**/*.log
+server/**/*.test
+
+# Secrets
+.env
+*.pem
+!server/deploy/docker/assets/test-server-rsa.pub
+!android/TMessagesProj/jni/tgnet/*.pem

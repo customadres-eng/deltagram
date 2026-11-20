@@ -1,0 +1,32 @@
+{
+  "name": "Deltament — карточки и маркет DeltaGram",
+  "short_name": "Deltament",
+  "description": "TON-карта, Stars-карта, маркет подарков и юзернеймов DeltaGram.",
+  "start_url": "/profile",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#100a0c",
+  "theme_color": "#100a0c",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/logo-mark.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-mark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/avatar.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

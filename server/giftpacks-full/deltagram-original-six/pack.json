@@ -1,0 +1,48 @@
+{
+  "pack_name": "DeltaGram Original Six",
+  "author": "Telegram GiftChanges CDN",
+  "gifts": [
+    {
+      "id_slug": "teddy-bear-5170233102089322756",
+      "title": "Teddy Bear",
+      "stars": 15,
+      "convert_stars": 7,
+      "base_animation": "teddy-bear.tgs"
+    },
+    {
+      "id_slug": "gift-111-5170250947678437525",
+      "title": "111",
+      "stars": 25,
+      "convert_stars": 12,
+      "base_animation": "111.tgs"
+    },
+    {
+      "id_slug": "bouquet-5170314324215857265",
+      "title": "Bouquet",
+      "stars": 25,
+      "convert_stars": 12,
+      "base_animation": "bouquet.tgs"
+    },
+    {
+      "id_slug": "crystall-5170521118301225164",
+      "title": "CRYSTALL",
+      "stars": 100,
+      "convert_stars": 50,
+      "base_animation": "crystall.tgs"
+    },
+    {
+      "id_slug": "rocket-5170564780938756245",
+      "title": "Rocket",
+      "stars": 100,
+      "convert_stars": 50,
+      "base_animation": "rocket.tgs"
+    },
+    {
+      "id_slug": "comp-1-5170690322832818290",
+      "title": "Comp 1",
+      "stars": 100,
+      "convert_stars": 50,
+      "base_animation": "comp-1.tgs"
+    }
+  ]
+}

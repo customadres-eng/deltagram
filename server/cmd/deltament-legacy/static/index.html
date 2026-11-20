@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0e1116" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <title>Deltament — DeltaGram</title>
+    <link rel="preload" as="image" href="/favicon.png" />
+    <!-- legacy logo override disabled -->
+    <script>
+      (() => {
+        const replacements = [
+          [/XIROX/g, "Deltament"],
+          [/@XiroCodeBot/g, "@deltagram_robot"],
+          [/XiroCodeBot/g, "deltagram_robot"]
+        ];
+        const replaceText = (value) => replacements.reduce((text, [from, to]) => text.replace(from, to), value);
+        const walk = (root) => {
+          const nodes = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          const textNodes = [];
+          while (nodes.nextNode()) textNodes.push(nodes.currentNode);
+          for (const node of textNodes) {
+            const next = replaceText(node.nodeValue || "");
+            if (next !== node.nodeValue) node.nodeValue = next;
+          }
+        };
+        const observer = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (node.nodeType === Node.TEXT_NODE) {
+                node.nodeValue = replaceText(node.nodeValue || "");
+              } else if (node.nodeType === Node.ELEMENT_NODE) {
+                walk(node);
+              }
+            }
+          }
+        });
+        document.addEventListener("DOMContentLoaded", () => {
+          walk(document.body);
+          observer.observe(document.body, {childList: true, subtree: true, characterData: true});
+        });
+      })();
+    </script>
+    <!-- end legacy logo override -->
+    <script>
+      (()=>{
+        const api=async(path,body)=>{const r=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||j.error||'Запит не виконано');return j};
+        const nano=s=>{s=String(s).trim();if(!/^\d+(?:\.\d{1,9})?$/.test(s)||Number(s)<=0)throw Error('Введи коректну суму TON.');const p=s.split('.');return (BigInt(p[0])*1000000000n+BigInt((p[1]||'').padEnd(9,'0'))).toString()};
+        const close=()=>document.querySelector('.dm-real-wallet')?.remove();
+        const open=(mode)=>{close();const withdrawal=mode==='withdraw',layer=document.createElement('div');layer.className='dm-topup-modal dm-real-wallet';layer.innerHTML='<form class="dm-topup-card"><h3>'+ (withdrawal?'Виведення в Stars':'Поповнення TON') +'</h3><p>'+ (withdrawal?'Вкажи TON. Отримаєш Stars за курсом 1 TON = 100 Stars.':'Вкажи Stars. Вони спишуться в DeltaGram і конвертуються в TON за курсом 100 Stars = 1 TON.') +'</p><input name="amount" type="number" min="'+(withdrawal?'0.01':'1')+'" step="'+(withdrawal?'0.01':'1')+'" placeholder="'+(withdrawal?'TON':'Stars')+'" required><div class="dm-wallet-conversion">'+(withdrawal?'0 Stars':'0 TON')+'</div><div class="dm-topup-status"></div><div class="dm-topup-actions"><button type="button" class="dm-action secondary" data-close>Скасувати</button><button class="dm-action" type="submit">'+(withdrawal?'Вивести':'Поповнити')+'</button></div></form>';document.body.appendChild(layer);const f=layer.querySelector('form'),i=f.amount,out=f.querySelector('.dm-wallet-conversion'),status=f.querySelector('.dm-topup-status');i.oninput=()=>{const n=Number(i.value)||0;out.textContent=withdrawal?(n*100).toLocaleString('uk-UA')+' Stars':(n/100).toFixed(2).replace(/\.00$/,'')+' TON'};layer.onclick=e=>{if(e.target===layer)close()};layer.querySelector('[data-close]').onclick=close;f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('[type=submit]');b.disabled=true;try{const result=withdrawal?await api('/api/me/withdraw',{amount:nano(i.value),request_id:crypto.randomUUID()}):await api('/api/me/topup/direct',{currency:'XTR',amount:Number(i.value),request_id:crypto.randomUUID()});status.textContent=withdrawal?'Зараховано '+Number(result.stars||0)+' Stars.':'Зараховано '+(Number(i.value)/100)+' TON.';setTimeout(close,1200)}catch(err){status.textContent=err.message;b.disabled=false}}};
+        const addWallet=()=>{const panel=document.querySelector('.dm-control-panel');if(!panel||panel.querySelector('[data-real-wallet-buttons]'))return;const box=document.createElement('div');box.dataset.realWalletButtons='1';box.className='dm-wallet-buttons';box.innerHTML='<button type="button" class="dm-action" data-real-topup>Поповнити TON</button><button type="button" class="dm-action secondary" data-real-withdraw>Вивести в Stars</button>';box.querySelector('[data-real-topup]').onclick=()=>open('topup');box.querySelector('[data-real-withdraw]').onclick=()=>open('withdraw');panel.appendChild(box)};
+        const filter=()=>{if(document.querySelector('[data-real-filters]'))return;const root=document.querySelector('#root');if(!root)return;const bar=document.createElement('div');bar.dataset.realFilters='1';bar.className='dm-real-filters';bar.innerHTML='<input placeholder="Пошук юзернейма" data-real-search><select data-real-kind><option value="all">Усі лоти</option><option value="username">Юзернейми</option><option value="ton">З TON ставкою</option><option value="active">Активні</option></select>';root.prepend(bar);const apply=()=>{const q=bar.querySelector('input').value.toLowerCase(),kind=bar.querySelector('select').value;root.querySelectorAll('.card').forEach(card=>{if(card===bar||bar.contains(card))return;const text=card.textContent.toLowerCase(),ok=(!q||text.includes(q))&&(kind==='all'||kind==='username'&&text.includes('юзернейм')||kind==='ton'&&text.includes('ton')||kind==='active'&&!text.includes('заверш'));card.style.display=ok?'':'none'})};bar.oninput=apply;bar.onchange=apply};
+        document.addEventListener('click',e=>{const t=e.target.closest?.('[data-dm-topup]');if(t){e.preventDefault();e.stopImmediatePropagation();open('topup')}},{capture:true});
+        const originalFetch=window.fetch;window.fetch=async(...args)=>{const response=await originalFetch(...args);const url=String(args[0]?.url||args[0]||'');if(url.includes('/bid'))setTimeout(()=>window.dispatchEvent(new Event('dm-bid-placed')),0);return response};
+        new MutationObserver(()=>{addWallet();filter()}).observe(document.documentElement,{childList:true,subtree:true});
+        document.addEventListener('DOMContentLoaded',()=>{addWallet();filter()});
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-DzF6uf21.js?v=deltament-20261028-marketplace"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C9ihTewg.css?v=deltament-20261028-marketplace">
+    <style>
+      .deltament-brand-logo{width:32px;height:32px;object-fit:cover;border-radius:10px;vertical-align:middle;margin-right:9px;box-shadow:0 3px 12px #0004}
+      .dm-mark-crop{display:inline-block;position:relative;flex:0 0 auto;width:32px;height:32px;overflow:hidden;vertical-align:middle;border:1px solid #ffffff18;border-radius:10px;background:#080c13;box-shadow:0 4px 14px #0006}
+      .dm-mark-crop--large{width:64px;height:64px;margin-inline:auto;border-radius:21px;box-shadow:0 10px 28px #0008,0 0 22px #f22b3828}
+      .dm-mark-crop img{position:absolute!important;left:50%!important;top:50%!important;width:165%!important;height:165%!important;max-width:none!important;transform:translate(-50%,-50%)!important;object-fit:cover!important}
+      .deltament-auth-pending{opacity:.65;pointer-events:none}
+      :root{--font-sans:'Manrope',Inter,system-ui,sans-serif;--font-brand:'Manrope',Inter,system-ui,sans-serif}
+      :root{--dm-glow:#69d7ff;--dm-violet:#9d7cff}
+      body{font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at 12% 0%,#193252 0,transparent 38%),radial-gradient(circle at 90% 10%,#30205f 0,transparent 34%),#080c13;background-attachment:fixed}
+      #root{animation:dm-enter .55s cubic-bezier(.2,.8,.2,1)}
+      .card{transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease;backdrop-filter:blur(16px)}
+      .card:hover{transform:translateY(-4px);border-color:#69d7ff80!important;box-shadow:0 16px 45px #0006,0 0 25px #69d7ff18}
+      button,a{transition:transform .2s ease,filter .2s ease} button:hover,a:hover{filter:brightness(1.12)}
+      .deltament-sound{position:fixed;right:16px;bottom:16px;z-index:50;display:grid;place-items:center;width:42px;height:42px;border:1px solid #ffffff20;border-radius:50%;background:#101827cc;color:#bfefff;box-shadow:0 8px 25px #0005;cursor:pointer}
+      .deltament-sound.on{color:#fff;background:linear-gradient(135deg,#ff4654,#9855ff);box-shadow:0 0 24px #e8487770}
+      .deltament-language{position:fixed;right:16px;bottom:68px;z-index:50;height:36px;padding:0 10px;border:1px solid #ffffff20;border-radius:18px;background:#101827e6;color:#e9f6ff;font:600 12px Inter,system-ui,sans-serif;box-shadow:0 8px 25px #0005;cursor:pointer}
+      .deltament-language:focus{outline:2px solid #69d7ff80;outline-offset:2px}
+      .deltament-orb{position:fixed;inset:auto auto 18% -80px;width:180px;height:180px;border-radius:50%;background:#5edcff18;filter:blur(20px);pointer-events:none;animation:dm-orbit 13s ease-in-out infinite alternate}
+      @keyframes dm-enter{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
+      @keyframes dm-orbit{to{transform:translate(105vw,-18vh) scale(1.5);opacity:.3}}
+      @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+      .dm-control-panel{position:fixed;left:16px;bottom:16px;z-index:60;width:min(420px,calc(100vw - 32px));max-height:min(72vh,620px);overflow:auto;padding:18px;border:1px solid #ffffff1f;border-radius:20px;background:#101827f2;box-shadow:0 20px 70px #0009,0 0 30px #69d7ff12;backdrop-filter:blur(20px);color:#eef6ff}.dm-wallet-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.dm-wallet-conversion{margin-top:10px;color:#a9efff;font-size:13px;font-weight:700}.dm-real-filters{display:flex;gap:8px;max-width:980px;margin:0 auto 14px;padding:8px;border:1px solid #ffffff18;border-radius:14px;background:#101827cc;position:relative;z-index:5}.dm-real-filters input,.dm-real-filters select{min-width:0;flex:1;height:40px;padding:0 12px;border:1px solid #ffffff18;border-radius:10px;background:#080c13;color:#eef6ff;font:inherit}.dm-real-filters select{flex:0 0 170px}
+      .dm-control-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.dm-control-head strong{font-size:16px}.dm-control-muted{color:#93a4b9;font-size:12px}.dm-control-balance{margin:14px 0;padding:13px 14px;border:1px solid #69d7ff28;border-radius:14px;background:#69d7ff0d}.dm-control-balance b{display:block;margin-top:3px;font-size:22px;color:#a9efff}
+      .dm-control-list{display:grid;gap:8px;margin-top:12px}.dm-channel{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid #ffffff14;border-radius:13px;background:#ffffff08}.dm-channel-name{min-width:0}.dm-channel-name b,.dm-channel-name span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dm-channel-name span{color:#93a4b9;font-size:11px;margin-top:2px}.dm-action{border:0;border-radius:10px;padding:8px 10px;background:linear-gradient(135deg,#69d7ff,#9d7cff);color:#07101a;font:700 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}.dm-action.secondary{background:#ffffff12;color:#d9f7ff;border:1px solid #ffffff1a}.dm-control-error{margin-top:10px;color:#ff9eaa;font-size:12px}.dm-control-ok{margin-top:10px;color:#8ff0bd;font-size:12px}.dm-control-close{border:0;background:transparent;color:#93a4b9;font-size:20px;cursor:pointer}
+      .dm-topup-modal{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:20px;background:#02050bb8;backdrop-filter:blur(8px)}.dm-topup-card{width:min(380px,100%);padding:20px;border:1px solid #ffffff20;border-radius:18px;background:#101827;color:#eef6ff;box-shadow:0 24px 80px #000b}.dm-topup-card h3{margin:0 0 6px}.dm-topup-card p{margin:0 0 16px;color:#93a4b9;font-size:12px}.dm-topup-card input{width:100%;padding:11px 12px;border:1px solid #ffffff20;border-radius:10px;background:#080c13;color:#fff;outline:none}.dm-topup-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}.dm-topup-status{min-height:18px;margin-top:10px;color:#a9efff;font-size:12px}
+      @media(max-width:600px){.dm-control-panel{left:10px;bottom:10px;width:calc(100vw - 20px);padding:14px}}
+    </style>
+    
+    <script>
+      (()=>{
+        if (true) {
+        const mark=(root)=>{
+          if(root.nodeType!==Node.ELEMENT_NODE)return;
+          const candidates=[];
+          if(root.matches?.('img[src="/logo-mark.png"]'))candidates.push(root);
+          candidates.push(...root.querySelectorAll?.('img[src="/logo-mark.png"]')||[]);
+          for(const old of candidates){
+            if(!old.isConnected)continue;
+            const box=document.createElement('span');
+            box.className='dm-mark-crop'+(old.classList.contains('size-16')?' dm-mark-crop--large':'');
+            box.setAttribute('aria-hidden','true');
+            const img=document.createElement('img');img.src='/favicon.png';img.alt='';img.draggable=false;
+            box.appendChild(img);old.replaceWith(box);
+          }
+        };
+        const logos=new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(mark)));
+        logos.observe(document.documentElement,{childList:true,subtree:true});
+        mark(document.documentElement);
+        }
+      })();
+    </script>
+    <script>
+      (()=>{
+        document.addEventListener('DOMContentLoaded',()=>{
+          const orb=document.createElement('div');orb.className='deltament-orb';document.body.appendChild(orb);
+          const toggle=document.createElement('button');toggle.className='deltament-sound';toggle.type='button';toggle.title='Звуки інтерфейсу';document.body.appendChild(toggle);
+          let enabled=localStorage.getItem('deltament-sfx')!=='off',audioContext=null,lastSuccess=0,lastPopup=0;
+          const sync=()=>{toggle.classList.toggle('on',enabled);toggle.textContent=enabled?'♫':'♪';toggle.setAttribute('aria-label',enabled?'Вимкнути звуки':'Увімкнути звуки')};
+          const context=()=>{audioContext??=new(window.AudioContext||window.webkitAudioContext)();if(audioContext.state==='suspended')void audioContext.resume();return audioContext};
+          const tone=(frequency,duration=.085,shape='sine',delay=0,volume=.055)=>{
+            if(!enabled)return;try{const ctx=context(),osc=ctx.createOscillator(),gain=ctx.createGain(),at=ctx.currentTime+delay;osc.type=shape;osc.frequency.setValueAtTime(frequency,at);gain.gain.setValueAtTime(.0001,at);gain.gain.exponentialRampToValueAtTime(volume,at+.009);gain.gain.exponentialRampToValueAtTime(.0001,at+duration);osc.connect(gain).connect(ctx.destination);osc.start(at);osc.stop(at+duration+.015)}catch{}
+          };
+          const clickAudio=new Audio('/assets/audio/interface-click.mp3');clickAudio.preload='auto';clickAudio.volume=.6;
+          const click=()=>{if(!enabled)return;try{clickAudio.currentTime=0;const played=clickAudio.play();if(played?.catch)played.catch(()=>{tone(880,.035,'sine',0,.045);tone(590,.045,'triangle',.018,.025)})}catch{tone(880,.035,'sine',0,.045);tone(590,.045,'triangle',.018,.025)}};
+          const successAudio=new Audio('/assets/audio/code-success.mp3');successAudio.preload='auto';successAudio.volume=.5;
+          const success=()=>{if(!enabled)return;try{successAudio.currentTime=0;const played=successAudio.play();if(played?.catch)played.catch(()=>{tone(523,.13,'sine',0,.045);tone(659,.13,'sine',.075,.045);tone(784,.19,'sine',.15,.05)})}catch{tone(523,.13,'sine',0,.045);tone(659,.13,'sine',.075,.045);tone(784,.19,'sine',.15,.05)}};
+          const popup=()=>{
+            if(!enabled||Date.now()-lastPopup<400)return;
+            lastPopup=Date.now();
+            const audio=new Audio('/assets/audio/popup-open.mp3');audio.preload='auto';audio.volume=.18;
+            const played=audio.play();if(played?.catch)played.catch(()=>{tone(740,.08,'sine',0,.035);tone(990,.11,'sine',.055,.03)});
+          };
+          const successNode=node=>{
+            if(node.nodeType!==Node.ELEMENT_NODE&&node.nodeType!==Node.TEXT_NODE)return false;
+            const value=node.textContent||'';return value.includes('Добро пожаловать в Deltament')||value.includes('Welcome to Deltament');
+          };
+          const changes=new MutationObserver(records=>{
+            for(const record of records)for(const node of record.addedNodes){
+              if(node.nodeType===Node.ELEMENT_NODE&&node.matches?.('[role="dialog"]'))popup();
+              else if(node.nodeType===Node.ELEMENT_NODE&&node.querySelector?.('[role="dialog"]'))popup();
+              if(successNode(node)&&Date.now()-lastSuccess>1500){lastSuccess=Date.now();success()}
+            }
+          });
+          changes.observe(document.body,{childList:true,subtree:true});
+          sync();
+          toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('deltament-sfx',enabled?'on':'off');sync();if(enabled)click()});
+          document.addEventListener('click',event=>{
+            if(event.target.closest('.deltament-sound'))return;
+            if(event.target.closest('button,a,[role="button"]'))click();
+          },{capture:true});
+        });
+      })();
+    </script>
+    <script>
+      (()=>{
+        const dictionary={
+          'Профиль':'Profile','Инвентарь':'Inventory','Пополнить баланс':'Top up balance','Выйти':'Log out',
+          'Войти':'Log in','Юзернеймы':'Usernames','Номера':'Numbers','Подарки':'Gifts','Витрина':'Marketplace',
+          'Покупка и продажа юзернеймов':'Buy and sell usernames','Анонимные номера':'Anonymous numbers',
+          'Топ аукционов':'Top auctions','Недавно проданы':'Recently sold','На аукционе':'On auction',
+          'Проданные':'Sold','Поиск':'Search','История операций':'Transaction history','Операций пока нет':'No transactions yet',
+          'Баланс':'Balance','Пополнить':'Top up','Готово':'Done','Добро пожаловать в Deltament':'Welcome to Deltament',
+          'Получить код':'Get code','Проверяем код':'Checking code','Отправить код повторно':'Resend code',
+          'Вход в Deltament':'Log in to Deltament','Настройки':'Settings','Язык интерфейса':'Interface language',
+          'Русский':'Russian','Английский':'English'
+        };
+        const russianDictionary={
+          'For +888, submit a request instead.':'Для +888 отправьте заявку.',
+          'For NFT usernames, submit a request instead.':'Для NFT-юзернеймов отправьте заявку.',
+          'Telegram Premium purchases are disabled.':'Покупка Telegram Premium отключена.',
+          'Could not load lots':'Не удалось загрузить лоты',
+          'Could not load account':'Не удалось загрузить аккаунт'
+        };
+        let language='ru',button=null,englishNodes=[];
+        const translate=()=>{
+          const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+          while(walker.nextNode()){
+            const node=walker.currentNode, original=node.nodeValue||'';
+            let next=original;
+            const source=language==='en'?dictionary:russianDictionary;
+            for(const [from,to] of Object.entries(source)) next=next.split(from).join(to);
+            if(next!==original){node.nodeValue=next;englishNodes.push([node,original]);}
+          }
+        };
+        const restore=()=>{for(const [node,value] of englishNodes)if(node.isConnected)node.nodeValue=value;englishNodes=[]};
+        const setButton=()=>{if(!button)return;button.value=language;button.title=language==='ru'?'Язык интерфейса':'Interface language'};
+        const mount=async()=>{
+          try{const response=await fetch('/api/me',{credentials:'include'});const data=await response.json();if(!data.user){button?.remove();button=null;return}language=data.user.language||localStorage.getItem('deltament-language')||'ru';
+            if(!button){button=document.createElement('select');button.className='deltament-language';button.setAttribute('aria-label','Язык интерфейса');button.innerHTML='<option value="ru">Русский</option><option value="en">English</option>';document.body.appendChild(button);button.addEventListener('change',async()=>{const next=button.value;const response=await fetch('/api/me/language',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:next})});if(response.ok){localStorage.setItem('deltament-language',next);window.location.reload()}})}
+            setButton();translate();
+          }catch{}
+        };
+        document.addEventListener('DOMContentLoaded',()=>{mount();setInterval(mount,3000)});
+      })();
+    </script>
+    <script>
+      (()=>{
+        const esc=(value)=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        const api=async(path,options={})=>{const response=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.message||body.error||'Не удалось выполнить запрос');return body};
+        const mount=async()=>{
+          const me=await api('/api/me'); if(!me.user)return;
+          if(document.querySelector('.dm-control-panel'))return;
+          const panel=document.createElement('section');panel.className='dm-control-panel';panel.innerHTML=`
+            <div class="dm-control-head"><div><strong>Мой Deltament</strong><div class="dm-control-muted">Аукционы и инвентарь аккаунта</div></div><button class="dm-control-close" type="button" aria-label="Закрыть">×</button></div>
+            <div class="dm-control-balance"><div class="dm-control-muted">Баланс</div><b data-dm-balance>Stars: загрузка…</b><div class="dm-control-muted" data-dm-ton-balance>TON: загрузка…</div><button class="dm-action secondary" data-dm-topup type="button">Пополнить баланс</button></div>
+            <div class="dm-control-head"><strong>Мои каналы</strong><button class="dm-action secondary" data-dm-refresh type="button">Обновить</button></div>
+            <div class="dm-control-list" data-dm-channels><div class="dm-control-muted">Загрузка каналов…</div></div><div data-dm-message></div>`;
+          document.body.appendChild(panel);
+          const message=panel.querySelector('[data-dm-message]');
+          const load=async()=>{try{const [balance,channels]=await Promise.all([api('/api/me/balance'),api('/api/me/channels')]);panel.querySelector('[data-dm-balance]').textContent=Number(balance.stars||0).toLocaleString('ru-RU')+' ⭐';const list=panel.querySelector('[data-dm-channels]');const rows=channels.channels||[];list.innerHTML=rows.length?rows.map(c=>`<div class="dm-channel"><div class="dm-channel-name"><b>@${esc(c.username)}</b><span>${esc(c.title)}</span></div><button class="dm-action" data-dm-list="${Number(c.id)}" data-dm-name="${esc(c.username)}" type="button">На аукцион</button></div>`).join(''):'<div class="dm-control-muted">Публичных каналов с username нет.</div>';list.querySelectorAll('[data-dm-list]').forEach(button=>button.addEventListener('click',async()=>{const price=Number(prompt('Стартовая цена в Stars:', '10'));if(!Number.isSafeInteger(price)||price<=0){message.className='dm-control-error';message.textContent='Введите положительную целую цену.';return}button.disabled=true;try{await api('/api/lots',{method:'POST',body:JSON.stringify({kind:'username',asset_key:button.dataset.dmName,channel_id:Number(button.dataset.dmList),start_price:price,hours:24})});message.className='dm-control-ok';message.textContent='Username выставлен на аукцион.';await load()}catch(error){message.className='dm-control-error';message.textContent=error.message}finally{button.disabled=false}}))}catch(error){message.className='dm-control-error';message.textContent=error.message}};
+          panel.querySelector('[data-dm-refresh]').addEventListener('click',load);
+          panel.querySelector('[data-dm-topup]').addEventListener('click',()=>{
+            const modal=document.createElement('div');modal.className='dm-topup-modal';modal.innerHTML='<form class="dm-topup-card"><h3>Пополнение баланса</h3><p>Укажи количество DeltaMent Stars. После подтверждения откроется официальный Telegram invoice с точной суммой.</p><input name="amount" type="number" min="1" max="1000000" step="1" placeholder="Количество Stars" required><div class="dm-topup-status"></div><div class="dm-topup-actions"><button class="dm-action secondary" type="button" data-close>Отмена</button><button class="dm-action" type="submit">Создать invoice</button></div></form>';
+            document.body.appendChild(modal);const form=modal.querySelector('form'),status=modal.querySelector('.dm-topup-status');modal.querySelector('[data-close]').addEventListener('click',()=>modal.remove());modal.addEventListener('click',event=>{if(event.target===modal)modal.remove()});form.addEventListener('submit',async event=>{event.preventDefault();const amount=Number(form.amount.value);if(!Number.isSafeInteger(amount)||amount<1||amount>1000000){status.textContent='Введите целое число от 1 до 1 000 000.';return}form.querySelector('[type=submit]').disabled=true;status.textContent='Создаём официальный платёж…';try{const result=await api('/api/me/topup/stars',{method:'POST',body:JSON.stringify({amount})});status.textContent='Invoice отправлен в привязанный DeltaGram-чат. Подтвердите оплату там, затем обновите баланс.';setTimeout(()=>modal.remove(),2800)}catch(error){status.textContent=error.message;form.querySelector('[type=submit]').disabled=false}});
+          });panel.querySelector('.dm-control-close').addEventListener('click',()=>panel.remove());load();
+        };
+        document.addEventListener('DOMContentLoaded',()=>{mount().catch(()=>{});setInterval(()=>{if(!document.querySelector('.dm-control-panel'))mount().catch(()=>{})},2500)});
+      })();
+    </script>
+    <script>
+      (()=>{
+        const esc=(value)=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        const api=async(path,options={})=>{const response=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.message||body.error||'Не удалось выполнить запрос');return body};
+        const minor=(value,currency)=>{const text=String(value??'').trim();if(!text||!/^\d+(?:\.\d+)?$/.test(text)||Number(text)<=0)throw new Error('Введите положительную сумму.');if(currency==='XTR'){if(!/^\d+$/.test(text)||Number(text)>1000000)throw new Error('Stars: целое число от 1 до 1 000 000.');return Number(text)}const parts=text.split('.');if(parts[1]&&parts[1].length>9)throw new Error('TON: максимум 9 знаков после запятой.');const nano=Math.round(Number(text)*1e9);if(!Number.isSafeInteger(nano)||nano<=0||nano>1e15)throw new Error('Некорректная сумма TON.');return nano};
+        const showModal=(title,copy,fields,submitLabel,handler)=>{const layer=document.createElement('div');layer.className='dm-topup-modal';layer.innerHTML='<form class="dm-topup-card"><h3>'+title+'</h3><p>'+copy+'</p>'+fields+'<div class="dm-topup-status"></div><div class="dm-topup-actions"><button class="dm-action secondary" type="button" data-close>Отмена</button><button class="dm-action" type="submit">'+submitLabel+'</button></div></form>';document.body.appendChild(layer);const form=layer.querySelector('form'),status=form.querySelector('.dm-topup-status');layer.querySelector('[data-close]').onclick=()=>layer.remove();layer.onclick=event=>{if(event.target===layer)layer.remove()};form.onsubmit=async event=>{event.preventDefault();const submit=form.querySelector('[type=submit]');submit.disabled=true;try{await handler(form,status);setTimeout(()=>layer.remove(),900)}catch(error){status.textContent=error.message;submit.disabled=false}}};
+        const refresh=panel=>{const button=panel.querySelector('[data-dm-refresh]');if(button)button.click()};
+        const auction=button=>{const name=button.dataset.dmName||'';const channelID=Number(button.dataset.dmList);showModal('Выставить username','Канал @'+esc(name)+' остаётся активным до окончания аукциона.','<select name="currency"><option value="XTR">Stars ⭐</option><option value="TON">TON</option></select><input name="amount" type="number" min="1" max="1000000" step="any" placeholder="Минимальная ставка" required>','Выставить',async(form,status)=>{const currency=form.currency.value,amount=minor(form.amount.value,currency);status.textContent='Создаём аукцион…';await api('/api/lots',{method:'POST',body:JSON.stringify({kind:'username',asset_key:name,channel_id:channelID,start_price:amount,currency,hours:24})});status.textContent='Username выставлен на аукцион.';refresh(button.closest('.dm-control-panel'))})};
+        const topup=panel=>showModal('Пополнение баланса','Сумма списывается с баланса DeltaGram и зачисляется в DeltaMent.','<select name="currency"><option value="XTR">Stars ⭐</option><option value="TON">TON</option></select><input name="amount" type="number" min="1" max="1000000" step="any" placeholder="Сумма" required>','Подтвердить',async(form,status)=>{const currency=form.currency.value,amount=minor(form.amount.value,currency);status.textContent='Проводим перевод…';await api('/api/me/topup/direct',{method:'POST',body:JSON.stringify({amount,currency,request_id:crypto.randomUUID()})});status.textContent='Баланс DeltaMent пополнен.';refresh(panel)});
+        const upgrade=panel=>{if(!panel||panel.dataset.dmUpgrade)return;panel.dataset.dmUpgrade='1';const top=panel.querySelector('[data-dm-topup]');if(top){const replacement=top.cloneNode(true);top.replaceWith(replacement);replacement.onclick=()=>topup(panel)};const scan=()=>{panel.querySelectorAll('[data-dm-list]:not([data-dm-upgraded])').forEach(button=>{button.dataset.dmUpgraded='1';const replacement=button.cloneNode(true);button.replaceWith(replacement);replacement.onclick=()=>auction(replacement)})};scan();new MutationObserver(scan).observe(panel,{childList:true,subtree:true})};
+        const watch=()=>document.querySelectorAll('.dm-control-panel').forEach(upgrade);
+        document.addEventListener('DOMContentLoaded',()=>{watch();setInterval(watch,250)});
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+</body>
+<script>
+(()=>{const scan=()=>document.querySelectorAll('[role="dialog"]').forEach(d=>{if(d.dataset.dmFunctional||!d.textContent.includes('Пополнение и вывод Stars доступны'))return;d.dataset.dmFunctional='1';d.innerHTML='<div class="dm-topup-card"><h3>Пополнить баланс</h3><p>Stars списываются с аккаунта DeltaGram и сразу зачисляются на баланс Deltament.</p><form><input name="amount" type="number" min="1" max="1000000" step="1" placeholder="Количество Stars" required><div class="dm-topup-status"></div><div class="dm-topup-actions"><button class="dm-action secondary" type="button" data-close>Отмена</button><button class="dm-action" type="submit">Пополнить</button></div></form></div>';const f=d.querySelector('form'),s=d.querySelector('.dm-topup-status');d.querySelector('[data-close]').onclick=()=>d.remove();f.onsubmit=async e=>{e.preventDefault();const a=Number(f.amount.value);if(!Number.isSafeInteger(a)||a<1||a>1000000){s.textContent='Введите целое число от 1 до 1 000 000.';return}const b=f.querySelector('[type=submit]');b.disabled=true;s.textContent='Проводим перевод…';try{const r=await fetch('/api/me/topup/direct',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({currency:'XTR',amount:a,request_id:crypto.randomUUID()})}),j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||j.error||'Не удалось пополнить баланс.');s.textContent='Баланс пополнен.';setTimeout(()=>location.reload(),700)}catch(e){s.textContent=e.message;b.disabled=false}}});document.addEventListener('DOMContentLoaded',()=>{scan();new MutationObserver(scan).observe(document.body,{childList:true,subtree:true})})})();
+</script>
+<script>
+(()=>{
+  const api=async(path,options={})=>{
+    const response=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(body.message||body.error||'Не удалось выполнить пополнение');
+    return body;
+  };
+  const amount=(value,currency)=>{
+    const text=String(value||'').trim();
+    if(currency==='XTR'){if(!/^\d+$/.test(text)||Number(text)<1||Number(text)>1000000)throw Error('Stars: укажи целое число от 1 до 1 000 000.');return Number(text);}
+    if(!/^\d+(?:\.\d{1,9})?$/.test(text)||Number(text)<=0)throw Error('TON: укажи корректную сумму.');
+    const parts=text.split('.'); const whole=BigInt(parts[0]); const fraction=(parts[1]||'').padEnd(9,'0');
+    const nano=whole*1000000000n+BigInt(fraction||'0'); if(nano>9000000000000000000n)throw Error('TON: сумма слишком большая.'); return nano.toString();
+  };
+  const open=()=>{
+    if(document.querySelector('.dm-currency-topup'))return;
+    const layer=document.createElement('div'); layer.className='dm-topup-modal dm-currency-topup';
+    layer.innerHTML='<form class=\"dm-topup-card\"><h3>Пополнение баланса</h3><p>Выбери валюту. 1 Stars зачисляется как 1 Stars, а 1 TON — как 1 TON.</p><select name=\"currency\"><option value=\"XTR\">Stars ⭐</option><option value=\"TON\">TON</option></select><input name=\"amount\" type=\"number\" min=\"1\" step=\"any\" placeholder=\"Сумма\" required><div class=\"dm-topup-status\"></div><div class=\"dm-topup-actions\"><button class=\"dm-action secondary\" type=\"button\" data-close>Отмена</button><button class=\"dm-action\" type=\"submit\">Пополнить</button></div></form>';
+    document.body.appendChild(layer); const form=layer.querySelector('form'), status=layer.querySelector('.dm-topup-status'), currency=form.currency, input=form.amount;
+    const sync=()=>{input.step=currency.value==='XTR'?'1':'0.000000001'; input.placeholder=currency.value==='XTR'?'Количество Stars':'Количество TON';}; sync(); currency.addEventListener('change',sync);
+    layer.querySelector('[data-close]').onclick=()=>layer.remove(); layer.onclick=e=>{if(e.target===layer)layer.remove()};
+    form.onsubmit=async e=>{e.preventDefault(); const cur=currency.value; let value; try{value=amount(input.value,cur);}catch(error){status.textContent=error.message;return;} const submit=form.querySelector('[type=submit]'); submit.disabled=true; status.textContent=cur==='XTR'?'Списываем Stars…':'Проверяем TON-провайдера…';
+      try{
+        if(cur==='TON') throw Error('Пополнение TON пока недоступно: не настроен blockchain-провайдер. TON не зачислен.');
+        await api('/api/me/topup/direct',{method:'POST',body:JSON.stringify({currency:'XTR',amount:value,request_id:crypto.randomUUID()})});
+        status.textContent='Зачислено ровно '+value+' Stars.'; setTimeout(()=>location.reload(),700);
+      }catch(error){status.textContent=error.message;submit.disabled=false;}
+    };
+  };
+  const replace=()=>{
+    document.querySelectorAll('[data-dm-topup]').forEach(button=>{if(button.dataset.dmCurrencyBound)return;button.dataset.dmCurrencyBound='1';button.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();open();};});
+    document.querySelectorAll('[role=dialog]').forEach(dialog=>{if(dialog.dataset.dmCurrencyBound||!dialog.textContent.includes('Пополнение и вывод Stars доступны'))return;dialog.dataset.dmCurrencyBound='1';dialog.innerHTML='';open();});
+  };
+  document.addEventListener('DOMContentLoaded',()=>{replace();new MutationObserver(replace).observe(document.body,{childList:true,subtree:true});});
+})();
+</script>
+<script>
+(()=>{
+  const json=async(path,options={})=>{const r=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const b=await r.json().catch(()=>({}));if(!r.ok)throw Error(b.message||b.error||'Ошибка пополнения');return b};
+  const tonNano=value=>{const s=String(value).trim();if(!/^\d+(?:\.\d{1,9})?$/.test(s)||Number(s)<=0)throw Error('Укажи корректную сумму TON.');const p=s.split('.'),f=(p[1]||'').padEnd(9,'0');return (BigInt(p[0])*1000000000n+BigInt(f)).toString()};
+  const open=()=>{if(document.querySelector('.dm-final-topup'))return;const layer=document.createElement('div');layer.className='dm-topup-modal dm-final-topup';const form=document.createElement('form');form.className='dm-topup-card';form.innerHTML=`<h3>Пополнение баланса</h3><p>Выбери валюту. Stars и TON зачисляются отдельно, без конвертации.</p><select name='currency'><option value='XTR'>Stars ⭐</option><option value='TON'>TON</option></select><input name='amount' type='number' min='1' step='1' placeholder='Количество Stars' required><div class='dm-topup-status'></div><div class='dm-topup-actions'><button class='dm-action secondary' type='button' data-close>Отмена</button><button class='dm-action' type='submit'>Пополнить</button></div>`;layer.appendChild(form);document.body.appendChild(layer);const cur=form.currency,input=form.amount,status=form.querySelector('.dm-topup-status');const sync=()=>{input.step=cur.value==='XTR'?'1':'0.000000001';input.placeholder=cur.value==='XTR'?'Количество Stars':'Количество TON'};sync();cur.onchange=sync;form.querySelector('[data-close]').onclick=()=>layer.remove();layer.onclick=e=>{if(e.target===layer)layer.remove()};form.onsubmit=async e=>{e.preventDefault();const currency=cur.value;let amount;try{if(currency==='XTR'){if(!/^\d+$/.test(input.value)||Number(input.value)<1||Number(input.value)>1000000)throw Error('Stars: целое число от 1 до 1 000 000.');amount=Number(input.value)}else amount=tonNano(input.value)}catch(error){status.textContent=error.message;return}const submit=form.querySelector('[type=submit]');submit.disabled=true;try{await json('/api/me/topup/direct',{method:'POST',body:JSON.stringify({currency,amount,request_id:crypto.randomUUID()})});status.textContent=currency==='XTR'?'Зачислено ровно '+amount+' Stars.':'Зачислено ровно '+input.value+' TON.';setTimeout(()=>location.reload(),700)}catch(error){status.textContent=error.message;submit.disabled=false}}};
+  const bind=()=>document.querySelectorAll('[data-dm-topup]').forEach(button=>{if(button.dataset.finalTopup)return;button.dataset.finalTopup='1';button.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();open()},{capture:true})});
+  document.addEventListener('click',e=>{const button=e.target.closest?.('[data-dm-topup]');if(button){e.preventDefault();e.stopImmediatePropagation();open()}},{capture:true});
+  document.addEventListener('DOMContentLoaded',()=>{bind();new MutationObserver(bind).observe(document.body,{childList:true,subtree:true})});
+})();
+</script>
+<style>@media(max-width:640px){.dm-control-panel{left:10px!important;right:10px!important;bottom:10px!important;width:auto!important;max-height:calc(100dvh - 20px);overflow:auto}.dm-action{min-height:42px}.dm-topup-card{width:min(100%,420px)!important;padding:18px!important}.dm-topup-card input,.dm-topup-card select{min-height:46px;font-size:16px}.dm-topup-actions{position:sticky;bottom:0;padding-top:10px;background:#101827}}</style>
+<script>
+(()=>{
+ const post=async(body)=>{const r=await fetch('/api/me/topup/direct',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||j.error||'Не удалось пополнить баланс');return j};
+ const tonNano=s=>{if(!/^\d+(?:\.\d{1,9})?$/.test(s)||Number(s)<=0)throw Error('Введите корректную сумму TON.');const p=s.split('.');return (BigInt(p[0])*1000000000n+BigInt((p[1]||'').padEnd(9,'0'))).toString()};
+ const open=()=>{if(document.querySelector('.dm-single-topup'))return;const layer=document.createElement('div');layer.className='dm-topup-modal dm-single-topup';layer.innerHTML='<form class=\"dm-topup-card\"><h3>Пополнение баланса</h3><p>Stars и TON зачисляются отдельно, без конвертации.</p><select name=\"currency\"><option value=\"XTR\">Stars ⭐</option><option value=\"TON\">TON</option></select><input name=\"amount\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"Количество Stars\" required><div class=\"dm-topup-status\"></div><div class=\"dm-topup-actions\"><button class=\"dm-action secondary\" type=\"button\" data-close>Отмена</button><button class=\"dm-action\" type=\"submit\">Пополнить</button></div></form>';document.body.appendChild(layer);const f=layer.querySelector('form'),c=f.currency,i=f.amount,s=f.querySelector('.dm-topup-status');const sync=()=>{i.step=c.value==='XTR'?'1':'0.000000001';i.placeholder=c.value==='XTR'?'Количество Stars':'Количество TON'};sync();c.onchange=sync;layer.querySelector('[data-close]').onclick=()=>layer.remove();layer.onclick=e=>{if(e.target===layer)layer.remove()};f.onsubmit=async e=>{e.preventDefault();let amount;try{if(c.value==='XTR'){if(!/^\d+$/.test(i.value)||Number(i.value)<1||Number(i.value)>1000000)throw Error('Stars: введите целое число от 1 до 1 000 000.');amount=Number(i.value)}else amount=tonNano(i.value)}catch(err){s.textContent=err.message;return}const b=f.querySelector('[type=submit]');b.disabled=true;s.textContent='Проводим перевод…';try{await post({currency:c.value,amount,request_id:crypto.randomUUID()});s.textContent=c.value==='XTR'?`Зачислено ровно ${amount} Stars.`:`Зачислено ровно ${i.value} TON.`;setTimeout(()=>location.reload(),800)}catch(err){s.textContent=err.message;b.disabled=false}}};
+ document.addEventListener('click',e=>{const b=e.target.closest?.('[data-dm-topup]');if(b){e.preventDefault();e.stopImmediatePropagation();open()}},{capture:true});
+ document.addEventListener('DOMContentLoaded',()=>{new MutationObserver(()=>{}).observe(document.body,{childList:true,subtree:true})});
+})();
+</script>
+<script>
+(()=>{
+  const api=async(path,options={})=>{const r=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const body=await r.json().catch(()=>({}));if(!r.ok)throw Error(body.message||body.error||'Не удалось выполнить запрос');return body};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const tonNano=s=>{if(!/^\d+(?:\.\d{1,9})?$/.test(String(s).trim())||Number(s)<=0)throw Error('Укажи корректную сумму TON.');const p=String(s).trim().split('.');return (BigInt(p[0])*1000000000n+BigInt((p[1]||'').padEnd(9,'0'))).toString()};
+  const modal=(title,copy,fields,submit,handler)=>{const layer=document.createElement('div');layer.className='dm-topup-modal dm-authoritative-topup';layer.innerHTML='<form class="dm-topup-card"><h3>'+title+'</h3><p>'+copy+'</p>'+fields+'<div class="dm-topup-status"></div><div class="dm-topup-actions"><button class="dm-action secondary" type="button" data-close>Отмена</button><button class="dm-action" type="submit">'+submit+'</button></div></form>';document.body.appendChild(layer);const f=layer.querySelector('form'),s=f.querySelector('.dm-topup-status');layer.querySelector('[data-close]').onclick=()=>layer.remove();layer.onclick=e=>{if(e.target===layer)layer.remove()};f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('[type=submit]');b.disabled=true;try{await handler(f,s);setTimeout(()=>layer.remove(),900)}catch(err){s.textContent=err.message;b.disabled=false}}};
+  const topup=()=>modal('Пополнение баланса','Stars списываются в DeltaGram и сразу конвертируются в TON по курсу 100 Stars = 1 TON.','<input name="amount" type="number" min="1" max="1000000" step="1" placeholder="Количество Stars" required><div class="dm-conversion">Получите: <b data-converted>0 TON</b></div>','Пополнить',async(f,s)=>{const text=f.amount.value;if(!/^\d+$/.test(text)||Number(text)<1||Number(text)>1000000)throw Error('Stars: целое число от 1 до 1 000 000.');s.textContent='Списываем Stars и зачисляем TON…';await api('/api/me/topup/direct',{method:'POST',body:JSON.stringify({currency:'XTR',amount:Number(text),request_id:crypto.randomUUID()})});s.textContent='Зачислено '+(Number(text)/100)+' TON.'});
+  const withdraw=()=>modal('Вывод в Stars','Введи TON. Выплата будет выполнена в Stars по курсу 1 TON = 100 Stars.','<input name="amount" type="number" min="0.01" step="0.01" placeholder="Количество TON" required><div class="dm-conversion">Получите: <b data-converted>0 Stars</b></div>','Вывести',async(f,s)=>{const nano=tonNano(f.amount.value);s.textContent='Оформляем выплату…';const result=await api('/api/me/withdraw',{method:'POST',body:JSON.stringify({amount:nano,request_id:crypto.randomUUID()})});s.textContent='Зачислено '+Number(result.stars||0)+' Stars.'});
+  const replace=()=>{document.querySelectorAll('[data-dm-topup]').forEach(old=>{if(old.dataset.dmAuthoritative)return;const b=old.cloneNode(true);b.removeAttribute('data-dm-topup');b.dataset.dmAuthoritative='1';b.addEventListener('click',e=>{e.preventDefault();topup()});old.replaceWith(b)});document.querySelectorAll('.dm-control-panel').forEach(panel=>{if(panel.querySelector('[data-dm-withdraw]'))return;const b=document.createElement('button');b.className='dm-action secondary';b.type='button';b.dataset.dmWithdraw='1';b.textContent='Вывести в Stars';b.onclick=withdraw;const top=panel.querySelector('[data-dm-authoritative]');(top?.parentElement||panel).appendChild(b)})};
+  const bindConversion=()=>document.querySelectorAll('.dm-authoritative-topup input[name=amount]').forEach(i=>{if(i.dataset.bound)return;i.dataset.bound='1';const out=i.parentElement.querySelector('[data-converted]')||i.closest('form').querySelector('[data-converted]');i.oninput=()=>{const n=Number(i.value)||0;if(out)out.textContent=i.closest('form').querySelector('[data-converted]')?.textContent.includes('TON')?((n/100).toFixed(2).replace(/\.00$/,'')+' TON'):(n*100).toLocaleString('ru-RU')+' Stars'};});
+  document.addEventListener('click',e=>{const bid=e.target.closest?.('[data-dm-bid]');if(!bid)return;setTimeout(()=>{window.dispatchEvent(new CustomEvent('dm:bid-updated'));replace()},500)},{capture:false});
+  document.addEventListener('DOMContentLoaded',()=>{replace();setInterval(()=>{replace();bindConversion()},400)});
+})();
+</script>
+<style>.dm-conversion{margin-top:10px;color:#a9efff;font-size:13px}@media(max-width:640px){.dm-topup-card{max-height:calc(100dvh - 24px);overflow:auto}.dm-topup-actions{gap:10px}.dm-topup-actions .dm-action{flex:1}}</style>
+</html>
