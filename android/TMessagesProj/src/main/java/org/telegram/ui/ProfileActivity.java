@@ -563,6 +563,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private HashMap<Integer, Integer> positionToOffset = new HashMap<>();
 
+    // DeltaGram: "Profile v2 (iOS)" — larger centered avatar, capsule action
+    // buttons and gift bubbles orbiting the photo, like Telegram for iOS.
+    public static final String PROFILE_V2_PREF = "dg_profile_v2";
+    private boolean profileV2;
+
+    public static boolean isProfileV2Enabled() {
+        return MessagesController.getGlobalMainSettings().getBoolean(PROFILE_V2_PREF, true);
+    }
+
     private float avatarX;
     private float avatarY;
     private float avatarScale;
@@ -2174,6 +2183,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public boolean onFragmentCreate() {
+        profileV2 = isProfileV2Enabled();
         userId = arguments.getLong("user_id", 0);
         chatId = arguments.getLong("chat_id", 0);
         topicId = arguments.getLong("topic_id", 0);
@@ -5663,7 +5673,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 nameTextView[a].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
             }
             nameTextView[a].setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(a == 0 ? 12 : 4));
-            nameTextView[a].setTextSizePx(dp(17.5f));
+            nameTextView[a].setTextSizePx(dp(profileV2 ? 19f : 17.5f));
             nameTextView[a].setGravity(Gravity.LEFT);
             nameTextView[a].setTypeface(AndroidUtilities.bold());
             nameTextView[a].setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
@@ -5729,7 +5739,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             onlineTextView[a].setEllipsizeByGradient(true);
             onlineTextView[a].setTextColor(applyPeerColor(getThemedColor(Theme.key_actionBarDefaultSubtitle), true, null));
-            onlineTextView[a].setTextSizePx(dp(13.5f));
+            onlineTextView[a].setTextSizePx(dp(profileV2 ? 14.5f : 13.5f));
             onlineTextView[a].setGravity(Gravity.LEFT);
             onlineTextView[a].setAlpha(a == 0 ? 0.0f : 1.0f);
             onlineTextView[a].setPivotX(dp(8));
@@ -6136,10 +6146,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getHeaderOnlyExtraHeight() {
+        // Profile v2 uses a 108dp avatar instead of 96dp, so the header needs
+        // 12dp more room for the centered name and status underneath it.
+        final int extra = profileV2 ? 12 : 0;
         if (getActionsExtraHeight() == 0) {
-            return dp(168f);
+            return dp(168f + extra);
         }
-        return dp(152f);
+        return dp(152f + extra);
     }
 
     private int getActionsExtraHeight() {
@@ -8557,7 +8570,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             float h = openAnimationInProgress ? initialAnimationExtraHeight : extraHeight;
             if (h > headerExtraHeight || isPulledDown) {
                 expandProgress = Math.max(0f, Math.min(1f, (h - headerExtraHeight) / (listView.getMeasuredWidth() - newTop - getHeaderOnlyExtraHeight())));
-                avatarScale = lerp(96 / 42f, 138 / 42f, Math.min(1f, expandProgress * 3f)) / 100f * 42f;
+                avatarScale = lerp(profileV2 ? 108 / 42f : 96 / 42f, 138 / 42f, Math.min(1f, expandProgress * 3f)) / 100f * 42f;
                 pullUpProgress = 0.0f;
 
                 if (storyView != null) {
@@ -8821,14 +8834,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 updateCollectibleHint();
             } else if (h <= headerExtraHeight) {
                 if (openAnimationInProgress) {
-                    avatarScale = lerp(42, 96, diff) / 100f;
+                    avatarScale = lerp(42, profileV2 ? 108 : 96, diff) / 100f;
                     pullUpProgress = 0.0f;
                 } else {
                     float intoSize = 24f;
                     if (avatarGooey != null && avatarGooey.notchInfo != null && avatarGooey.notchInfo.isLikelyCircle) {
                         intoSize = 0.5f * avatarGooey.notchInfo.bounds.width() / AndroidUtilities.density;
                     }
-                    avatarScale = lerp(intoSize, 96, diff) / 100f;
+                    avatarScale = lerp(intoSize, profileV2 ? 108 : 96, diff) / 100f;
                     pullUpProgress = 1.0f - diff;
                 }
 
@@ -9031,11 +9044,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private void refreshNameAndOnlineYBasedOnExpand(float diff, float newTop) {
         float scale;
+        final float restingAvatar = profileV2 ? 108f : 96f;
         float expand = Math.max(0f, Math.min(1f, (extraHeight - getHeaderExtraHeight()) / (listView.getMeasuredWidth() - newTop - getHeaderOnlyExtraHeight())));
         if (extraHeight < getHeaderExtraHeight() && expand < 0.33f) {
-            scale = (24 + (54f + (42 - 24)) * diff) / 42.0f;
+            scale = (24 + (restingAvatar - 24) * diff) / 42.0f;
         } else {
-            scale = AndroidUtilities.lerp((42f + 54f) / 42f, (42f + 42f + 54f) / 42f, Math.min(1f, expand * 3f));
+            scale = AndroidUtilities.lerp(restingAvatar / 42f, (42f + 42f + 54f) / 42f, Math.min(1f, expand * 3f));
         }
 
         float endNameY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)

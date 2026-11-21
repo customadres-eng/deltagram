@@ -551,37 +551,58 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             float gx, gy;
             float delayValue;
 
-            switch (gift.position) {
-                case 0: // left
-                    gx = acx / 2f - (dp(20) * expandScale);
-                    gy = acy - dp(13);
-                    delayValue = 1.6f;
-                    break;
-                case 1: // top left
-                    gx = acx * 2f / 3f - (dp(6) * expandScale);
-                    gy = ay - dp(4);
-                    delayValue = 0;
-                    break;
-                case 2: // bottom left
-                    gx = acx * 2f / 3f - (dp(12) * expandScale);
-                    gy = ay + ah - dp(16);
-                    delayValue = 0.9f;
-                    break;
-                case 3: // right
-                    gx = acx * 1.5f + (dp(20) * expandScale);
-                    gy = acy - dp(13);
-                    delayValue = 1.6f;
-                    break;
-                case 4: // top right
-                    gx = acx * 4f / 3f + (dp(12) * expandScale);
-                    gy = ay - dp(4);
-                    delayValue = 0.9f;
-                    break;
-                default: // bottom right
-                    gx = acx * 4f / 3f + (dp(12) * expandScale);
-                    gy = ay + ah - dp(16);
-                    delayValue = 0;
-                    break;
+            if (ProfileActivity.isProfileV2Enabled()) {
+                // Profile v2 mirrors Telegram for iOS: pinned gifts float in
+                // bubbles around the upper half of the profile photo. The
+                // bottom stays free for the centered name and status.
+                final int slots = 6;
+                int slot = gift.position % slots;
+                if (slot < 0) {
+                    slot += slots;
+                }
+                final int idx = slot;
+                final float avatarRadius = Math.max(aw, ah) / 2f;
+                final float rx = avatarRadius + dpf2(14);
+                final float ry = avatarRadius + dpf2(10);
+                // π (left) → 3π/2 (top) → 2π (right), i.e. an arc above the
+                // photo instead of a full circle that would cover the name.
+                final double angle = Math.PI + Math.PI * idx / (slots - 1);
+                gx = acx + (float) Math.cos(angle) * rx;
+                gy = acy + (float) Math.sin(angle) * ry;
+                delayValue = (idx % 2 == 0) ? 0.9f : 0.2f;
+            } else {
+                switch (gift.position) {
+                    case 0: // left
+                        gx = acx / 2f - (dp(20) * expandScale);
+                        gy = acy - dp(13);
+                        delayValue = 1.6f;
+                        break;
+                    case 1: // top left
+                        gx = acx * 2f / 3f - (dp(6) * expandScale);
+                        gy = ay - dp(4);
+                        delayValue = 0;
+                        break;
+                    case 2: // bottom left
+                        gx = acx * 2f / 3f - (dp(12) * expandScale);
+                        gy = ay + ah - dp(16);
+                        delayValue = 0.9f;
+                        break;
+                    case 3: // right
+                        gx = acx * 1.5f + (dp(20) * expandScale);
+                        gy = acy - dp(13);
+                        delayValue = 1.6f;
+                        break;
+                    case 4: // top right
+                        gx = acx * 4f / 3f + (dp(12) * expandScale);
+                        gy = ay - dp(4);
+                        delayValue = 0.9f;
+                        break;
+                    default: // bottom right
+                        gx = acx * 4f / 3f + (dp(12) * expandScale);
+                        gy = ay + ah - dp(16);
+                        delayValue = 0;
+                        break;
+                }
             }
 
             final float collapseProgressWithEnter;

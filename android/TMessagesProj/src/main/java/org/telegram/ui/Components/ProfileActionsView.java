@@ -41,6 +41,7 @@ import androidx.core.math.MathUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildConfig;
+import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.Utilities;
@@ -510,7 +511,10 @@ public class ProfileActionsView extends View {
     }
 
     public float getRoundRadius() {
-        return dp(16);
+        // Telegram for iOS (13.3 profile refresh) uses capsule-shaped profile
+        // action buttons. Profile v2 mirrors that; the classic layout keeps
+        // the 16dp rounded rectangles.
+        return dp(MessagesController.getGlobalMainSettings().getBoolean(ProfileActivity.PROFILE_V2_PREF, true) ? 27 : 16);
     }
 
     private Action hit = null;

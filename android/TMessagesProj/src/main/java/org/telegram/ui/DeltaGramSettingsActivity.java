@@ -287,6 +287,14 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                         presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_OTHER)));
 
         content.addView(section("Профиль"));
+        addSwitch(content, "Профиль v2 (iOS)",
+                "Крупный аватар по центру, закруглённые кнопки и пузыри подарков вокруг фото — как в Telegram на iOS",
+                prefs().getBoolean(ProfileActivity.PROFILE_V2_PREF, true), (view, checked) -> {
+                    prefs().edit().putBoolean(ProfileActivity.PROFILE_V2_PREF, checked).apply();
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                            checked ? "Профиль v2 включён. Открой профиль заново."
+                                    : "Профиль v2 выключен. Открой профиль заново.").show();
+                });
         addSwitch(content, "Параллакс аватара",
                 "Аватар и пузыри подарков слегка «плавают» при наклоне телефона",
                 prefs().getBoolean("dg_avatar_parallax", true), (view, checked) ->
@@ -380,7 +388,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     private void resetSettings() {
         SharedPreferences.Editor editor = prefs().edit();
         for (String key : prefs().getAll().keySet()) {
-            if (key.startsWith("deltagram_")) {
+            if (key.startsWith("deltagram_") || key.startsWith("dg_")) {
                 editor.remove(key);
             }
         }
