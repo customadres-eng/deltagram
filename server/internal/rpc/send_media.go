@@ -236,7 +236,13 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 		r.maybeEnqueueWebPageResolve(userID, peer, res.SenderMessage.ID, res.SenderMessage.Media)
 		r.enqueueBotAPIPrivateMessageUpdateAsync(ctx, res)
 	}
-	return tgPrivateSendResultUpdates(res, p.randomID, true, users, chats), res.Duplicate, nil
+	updates := tgPrivateSendResultUpdates(res, p.randomID, true, users, chats)
+	if paid && !res.Duplicate {
+		if balance, err := r.deps.Stars.GetBalance(ctx, userID); err == nil {
+			updates.Updates = append(updates.Updates, &tg.UpdateStarsBalance{Balance: &tg.StarsAmount{Amount: balance.Balance}})
+		}
+	}
+	return updates, res.Duplicate, nil
 }
 
 // onMessagesUploadMedia 解析 InputMedia（上传或引用），返回可复用的 tg.MessageMedia。
