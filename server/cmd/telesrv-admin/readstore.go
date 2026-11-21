@@ -673,6 +673,11 @@ LEFT JOIN account_restrictions r ON r.user_id = u.id
 LEFT JOIN peer_usernames p ON p.peer_type = 'user' AND p.peer_id = u.id AND p.editable
 LEFT JOIN auth a ON a.user_id = u.id
 WHERE u.id = $1 OR u.phone = $2 OR u.phone = $3 OR lower(u.username) = $4 OR p.username_lower = $4
+   OR EXISTS (
+       SELECT 1 FROM public.collectible_usernames cu
+       WHERE cu.status = 'owned' AND cu.owner_peer_type = 'user'
+         AND cu.owner_peer_id = u.id AND cu.username_lower = $4
+   )
 ORDER BY u.id
 LIMIT $5`, id, phone, phoneRaw, username, accountSearchLimit)
 	if err != nil {

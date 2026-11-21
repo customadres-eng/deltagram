@@ -604,7 +604,11 @@ func (s *Service) GrantCustomVerification(ctx context.Context, req GrantCustomVe
 		return CommandResult{}, botVerificationInvalid("organization name is too long")
 	}
 	if description == "" && organization != "" {
-		description = domain.LocalizedVerificationDescription("en", organization)
+		if peer.Type == domain.PeerTypeChannel {
+			description = domain.LocalizedChannelVerificationDescription("en", organization)
+		} else {
+			description = domain.LocalizedVerificationDescription("en", organization)
+		}
 	}
 	if description == "" {
 		return CommandResult{}, botVerificationInvalid("description or organization name is required")

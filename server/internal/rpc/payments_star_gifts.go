@@ -961,6 +961,9 @@ func (r *Router) sendStarsTopupForm(ctx context.Context, userID, formID int64, i
 }
 
 func (r *Router) sendStarGiftToUser(ctx context.Context, senderID, recipientID int64, gift domain.StarGift, hideName bool, message string, messageEntities []domain.MessageEntity, prepaidUpgradeStars int64) (domain.SavedStarGiftRef, *tg.Updates, error) {
+	if domain.IsSystemUserID(recipientID) {
+		return domain.SavedStarGiftRef{}, nil, userIDInvalidErr()
+	}
 	unsaved, err := r.starGiftRecipientUnsaved(ctx, senderID, domain.Peer{Type: domain.PeerTypeUser, ID: recipientID})
 	if err != nil {
 		return domain.SavedStarGiftRef{}, nil, err

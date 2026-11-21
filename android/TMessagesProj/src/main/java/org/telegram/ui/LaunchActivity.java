@@ -6073,6 +6073,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     private boolean firstAppUpdateCheck = true;
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
+        if (ApplicationLoader.applicationContext != null
+                && ApplicationLoader.applicationContext.getPackageName().startsWith("org.deltagram.android")) {
+            return;
+        }
         if (!ApplicationLoader.isStandaloneBuild() && !ApplicationLoader.isBetaBuild()) {
             return;
         }

@@ -267,6 +267,26 @@ func LocalizedVerificationDescription(langCode, organization string) string {
 // verificationDescriptionFormats maps a primary language subtag to the sentence
 // around the organization name. Keep the organization inside the same quoting
 // convention each language uses for organization names.
+// channelVerificationDescriptionFormats is the channel-specific sentence. The
+// protocol description is rendered by the client verbatim, so a channel mark
+// must not say "account".
+var channelVerificationDescriptionFormats = map[string]string{
+	"en": `The channel is verified by the organization "%s".`,
+	"ru": `Канал верифицирован организацией «%s».`,
+	"uk": `Канал верифіковано організацією «%s».`,
+}
+
+// LocalizedChannelVerificationDescription is the channel counterpart of
+// LocalizedVerificationDescription.
+func LocalizedChannelVerificationDescription(langCode, organization string) string {
+	organization = strings.TrimSpace(organization)
+	format, ok := channelVerificationDescriptionFormats[normalizeVerificationLanguage(langCode)]
+	if !ok {
+		format = channelVerificationDescriptionFormats["en"]
+	}
+	return fmt.Sprintf(format, organization)
+}
+
 var verificationDescriptionFormats = map[string]string{
 	"en": `The account is verified by the organization "%s".`,
 	"ru": `Аккаунт верифицирован организацией «%s».`,

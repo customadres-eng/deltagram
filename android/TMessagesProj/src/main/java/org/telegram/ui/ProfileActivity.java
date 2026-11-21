@@ -1393,7 +1393,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (banner != null && !banner.isRecycled()) {
                     // DeltaGram: an uploaded profile banner replaces the color
                     // gradient behind the avatar.
-                    final float scale = Math.max(getMeasuredWidth() / (float) banner.getWidth(), y1 / (float) banner.getHeight());
+                    final float scale = getMeasuredWidth() / (float) banner.getWidth();
                     final int srcW = Math.min(banner.getWidth(), (int) (getMeasuredWidth() / scale));
                     final int srcH = Math.min(banner.getHeight(), (int) (y1 / scale));
                     final int srcX = (banner.getWidth() - srcW) / 2;
@@ -3899,7 +3899,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (userId == 0 || imageUpdater == null || myProfile) {
             musicView = new ProfileMusicView(context, resourcesProvider);
             balanceView = new ProfileBalanceView(context, resourcesProvider);
-            musicView.setTrailingView(balanceView);
             balanceView.setOnClickListener(v -> {
                 int tappedKind = balanceView.tappedKind();
                 if (tappedKind < 0) {
@@ -5556,6 +5555,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (musicView != null) {
             avatarsBlurView.setMusicView(musicView);
             avatarContainer2.addView(musicView, LayoutHelper.createFrame(-1, -1));
+            avatarContainer2.setClipChildren(false);
             avatarContainer2.addView(balanceView, LayoutHelper.createFrame(-1, -1));
         }
         avatarImage.setAvatarsViewPager(avatarsViewPager);
@@ -7478,7 +7478,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     org.telegram.messenger.DeltagramCards.cardFor(userId);
             if (publicCard != null && getParentActivity() != null) {
                 showDialog(new org.telegram.ui.Wallet.DeltamentPublicCardSheet(
-                        getParentActivity(), currentAccount, publicCard, resourcesProvider));
+                        getParentActivity(), currentAccount, publicCard, 0, resourcesProvider));
             } else {
                 org.telegram.messenger.DeltagramCards.refreshRegistry(currentAccount);
             }
@@ -9670,7 +9670,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             DeltagramCards.refreshRegistry(currentAccount);
             return;
         }
-        showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, resourcesProvider));
+        showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, kind, resourcesProvider));
     }
 
     public void onResume() {
@@ -10735,12 +10735,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (userInfo != null && userInfo.saved_music != null && (imageUpdater == null || myProfile)) {
                 hasMusic = true;
             }
-            // DeltaGram: the own profile always shows the music pill; it opens
-            // the built-in player even when no saved track is set.
-            if (myProfile) {
-                hasMusic = true;
-            }
-
             if (emptyRow < 0 && emptyRow2 < 0) {
                 if (hasMusic || hasBalance || peerColor != null || actionsView == null) {
                     emptyRow2 = rowCount++;
@@ -11190,10 +11184,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (musicView != null) {
             if (userInfo != null && userInfo.saved_music != null) {
                 musicView.setMusicDocument(userInfo.saved_music);
-            } else {
-                musicView.setText("DeltaGram Music", " — плейлист профиля");
             }
             musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
+            if (balanceView != null) {
+                balanceView.setTranslationY(hasMusic ? AndroidUtilities.dp(37) : 0);
+            }
             updateCardsBalance();
             musicView.invalidate();
             balanceView.invalidate();
