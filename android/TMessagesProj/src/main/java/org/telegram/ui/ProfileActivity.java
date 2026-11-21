@@ -61,6 +61,10 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.net.Uri;
@@ -525,6 +529,47 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private FlagSecureReason flagSecure;
 
+    // DeltaGram: subtle gyroscope parallax for the avatar and gift bubbles.
+    private SensorManager parallaxSensorManager;
+    private Sensor parallaxGyro;
+    private boolean parallaxRegistered;
+    private float parallaxX, parallaxY;
+    private long parallaxLastTimestamp;
+    private final SensorEventListener parallaxListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (avatarContainer2 == null) {
+                return;
+            }
+            final long now = event.timestamp;
+            final float dt = parallaxLastTimestamp == 0 ? 0.016f
+                    : Math.min(0.06f, (now - parallaxLastTimestamp) / 1_000_000_000f);
+            parallaxLastTimestamp = now;
+            final float maxX = dp(7f);
+            final float maxY = dp(5f);
+            final float targetX = Math.max(-maxX, Math.min(maxX, -event.values[1] * dp(13f)));
+            final float targetY = Math.max(-maxY, Math.min(maxY, event.values[0] * dp(10f)));
+            final float k = 1f - (float) Math.exp(-dt / 0.08f);
+            parallaxX += (targetX - parallaxX) * k;
+            parallaxY += (targetY - parallaxY) * k;
+            avatarContainer2.setTranslationX(parallaxX);
+            avatarContainer2.setTranslationY(parallaxY);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
+
+    // DeltaGram: "Profile v2 (iOS)" — larger centered avatar, capsule action
+    // buttons and gift bubbles orbiting the photo, like Telegram for iOS.
+    public static final String PROFILE_V2_PREF = "dg_profile_v2";
+    private boolean profileV2;
+
+    public static boolean isProfileV2Enabled() {
+        return MessagesController.getGlobalMainSettings().getBoolean(PROFILE_V2_PREF, true);
+    }
+
     private HashMap<Integer, Integer> positionToOffset = new HashMap<>();
 
     private float avatarX;
@@ -591,7 +636,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private final static int statistics = 19;
     private final static int start_secret_chat = 20;
     private final static int gallery_menu_save = 21;
-    private final static int gallery_menu_set_banner = 45;
+    // Must not collide with delete_group (45): the action bar click handler
+    // checks delete_group first, so a shared id swallowed the banner tap.
+    private final static int gallery_menu_set_banner = 50;
     private final static int view_discussion = 22;
     private final static int delete_topic = 23;
     private final static int report = 24;
@@ -2136,6 +2183,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public boolean onFragmentCreate() {
+        profileV2 = isProfileV2Enabled();
         userId = arguments.getLong("user_id", 0);
         chatId = arguments.getLong("chat_id", 0);
         topicId = arguments.getLong("topic_id", 0);
@@ -2412,6 +2460,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        stopAvatarParallax();
         if (sharedMediaLayout != null) {
             sharedMediaLayout.onDestroy();
         }
@@ -5628,7 +5677,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 nameTextView[a].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
             }
             nameTextView[a].setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(a == 0 ? 12 : 4));
-            nameTextView[a].setTextSizePx(dp(17.5f));
+            nameTextView[a].setTextSizePx(dp(profileV2 ? 19f : 17.5f));
             nameTextView[a].setGravity(Gravity.LEFT);
             nameTextView[a].setTypeface(AndroidUtilities.bold());
             nameTextView[a].setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
@@ -5694,7 +5743,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             onlineTextView[a].setEllipsizeByGradient(true);
             onlineTextView[a].setTextColor(applyPeerColor(getThemedColor(Theme.key_actionBarDefaultSubtitle), true, null));
-            onlineTextView[a].setTextSizePx(dp(13.5f));
+            onlineTextView[a].setTextSizePx(dp(profileV2 ? 14.5f : 13.5f));
             onlineTextView[a].setGravity(Gravity.LEFT);
             onlineTextView[a].setAlpha(a == 0 ? 0.0f : 1.0f);
             onlineTextView[a].setPivotX(dp(8));
@@ -6098,10 +6147,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getHeaderOnlyExtraHeight() {
+        // Profile v2 uses a 108dp avatar instead of 96dp, so the header needs
+        // 12dp more room for the centered name and status underneath it.
+        final int extra = profileV2 ? 12 : 0;
         if (getActionsExtraHeight() == 0) {
-            return dp(168f);
+            return dp(168f + extra);
         }
-        return dp(152f);
+        return dp(152f + extra);
     }
 
     private int getActionsExtraHeight() {
@@ -8519,7 +8571,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             float h = openAnimationInProgress ? initialAnimationExtraHeight : extraHeight;
             if (h > headerExtraHeight || isPulledDown) {
                 expandProgress = Math.max(0f, Math.min(1f, (h - headerExtraHeight) / (listView.getMeasuredWidth() - newTop - getHeaderOnlyExtraHeight())));
-                avatarScale = lerp(96 / 42f, 138 / 42f, Math.min(1f, expandProgress * 3f)) / 100f * 42f;
+                avatarScale = lerp(profileV2 ? 108 / 42f : 96 / 42f, 138 / 42f, Math.min(1f, expandProgress * 3f)) / 100f * 42f;
                 pullUpProgress = 0.0f;
 
                 if (storyView != null) {
@@ -8783,14 +8835,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 updateCollectibleHint();
             } else if (h <= headerExtraHeight) {
                 if (openAnimationInProgress) {
-                    avatarScale = lerp(42, 96, diff) / 100f;
+                    avatarScale = lerp(42, profileV2 ? 108 : 96, diff) / 100f;
                     pullUpProgress = 0.0f;
                 } else {
                     float intoSize = 24f;
                     if (avatarGooey != null && avatarGooey.notchInfo != null && avatarGooey.notchInfo.isLikelyCircle) {
                         intoSize = 0.5f * avatarGooey.notchInfo.bounds.width() / AndroidUtilities.density;
                     }
-                    avatarScale = lerp(intoSize, 96, diff) / 100f;
+                    avatarScale = lerp(intoSize, profileV2 ? 108 : 96, diff) / 100f;
                     pullUpProgress = 1.0f - diff;
                 }
 
@@ -8993,11 +9045,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private void refreshNameAndOnlineYBasedOnExpand(float diff, float newTop) {
         float scale;
+        final float restingAvatar = profileV2 ? 108f : 96f;
         float expand = Math.max(0f, Math.min(1f, (extraHeight - getHeaderExtraHeight()) / (listView.getMeasuredWidth() - newTop - getHeaderOnlyExtraHeight())));
         if (extraHeight < getHeaderExtraHeight() && expand < 0.33f) {
-            scale = (24 + (54f + (42 - 24)) * diff) / 42.0f;
+            scale = (24 + (restingAvatar - 24) * diff) / 42.0f;
         } else {
-            scale = AndroidUtilities.lerp((42f + 54f) / 42f, (42f + 42f + 54f) / 42f, Math.min(1f, expand * 3f));
+            scale = AndroidUtilities.lerp(restingAvatar / 42f, (42f + 42f + 54f) / 42f, Math.min(1f, expand * 3f));
         }
 
         float endNameY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
@@ -9683,6 +9736,54 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, kind, resourcesProvider));
     }
 
+    private void startAvatarParallax() {
+        if (parallaxRegistered || avatarContainer2 == null) {
+            return;
+        }
+        if (!MessagesController.getGlobalMainSettings().getBoolean("dg_avatar_parallax", true)) {
+            return;
+        }
+        try {
+            if (parallaxSensorManager == null) {
+                parallaxSensorManager = (SensorManager) ApplicationLoader.applicationContext.getSystemService(Context.SENSOR_SERVICE);
+            }
+            if (parallaxSensorManager == null) {
+                return;
+            }
+            if (parallaxGyro == null) {
+                parallaxGyro = parallaxSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            }
+            if (parallaxGyro == null) {
+                return;
+            }
+            parallaxLastTimestamp = 0;
+            parallaxSensorManager.registerListener(parallaxListener, parallaxGyro, SensorManager.SENSOR_DELAY_GAME);
+            parallaxRegistered = true;
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private void stopAvatarParallax() {
+        if (!parallaxRegistered) {
+            return;
+        }
+        try {
+            if (parallaxSensorManager != null) {
+                parallaxSensorManager.unregisterListener(parallaxListener);
+            }
+        } catch (Throwable ignore) {
+        }
+        parallaxRegistered = false;
+        parallaxLastTimestamp = 0;
+        parallaxX = 0f;
+        parallaxY = 0f;
+        if (avatarContainer2 != null) {
+            avatarContainer2.setTranslationX(0f);
+            avatarContainer2.setTranslationY(0f);
+        }
+    }
+
     public void onResume() {
         super.onResume();
         org.telegram.messenger.DeltagramCards.addListener(cardsRegistryListener);
@@ -9731,11 +9832,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         updateItemsUsername();
         needLayout(false);
+        startAvatarParallax();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        stopAvatarParallax();
         org.telegram.messenger.DeltagramCards.removeListener(cardsRegistryListener);
         if (undoView != null) {
             undoView.hide(true, 0);
