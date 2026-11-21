@@ -4,12 +4,16 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
+import android.animation.ValueAnimator;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
@@ -20,6 +24,8 @@ import android.util.LruCache;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -190,8 +196,9 @@ public class DeltamentMusicSheet extends BottomSheet {
         close.setTextSize(18);
         close.setTextColor(COLOR_TEXT);
         close.setGravity(Gravity.CENTER);
-        close.setBackground(rounded(COLOR_FIELD, dp(18)));
+        close.setBackground(ripple(COLOR_FIELD, dp(18)));
         close.setOnClickListener(v -> dismiss());
+        pressable(close);
         header.addView(close, LayoutHelper.createFrame(36, 36, Gravity.START | Gravity.CENTER_VERTICAL));
 
         titleView = new TextView(context);
@@ -210,6 +217,7 @@ public class DeltamentMusicSheet extends BottomSheet {
         queueButton.setGravity(Gravity.CENTER);
         queueButton.setPadding(dp(10), dp(6), dp(2), dp(6));
         queueButton.setOnClickListener(v -> setQueueMode(!queueMode));
+        pressable(queueButton);
         header.addView(queueButton, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 36, Gravity.END | Gravity.CENTER_VERTICAL));
     }
 
@@ -321,7 +329,9 @@ public class DeltamentMusicSheet extends BottomSheet {
         miniControl.setTextSize(18);
         miniControl.setTextColor(COLOR_TEXT);
         miniControl.setGravity(Gravity.CENTER);
+        miniControl.setBackground(ripple(COLOR_FIELD, dp(20)));
         miniControl.setOnClickListener(v -> togglePlayback());
+        pressable(miniControl);
         miniPlayer.addView(miniControl, LayoutHelper.createLinear(40, 40));
 
         miniTitle = new TextView(context);
@@ -338,6 +348,7 @@ public class DeltamentMusicSheet extends BottomSheet {
         close.setTextColor(COLOR_TEXT_SECONDARY);
         close.setGravity(Gravity.CENTER);
         close.setOnClickListener(v -> stopPlayback());
+        pressable(close);
         miniPlayer.addView(close, LayoutHelper.createLinear(36, 36));
     }
 
@@ -346,6 +357,63 @@ public class DeltamentMusicSheet extends BottomSheet {
         drawable.setColor(color);
         drawable.setCornerRadius(radius);
         return drawable;
+    }
+
+    /** Rounded background with a touch ripple, used for every tappable surface. */
+    private static Drawable ripple(int fill, float radius) {
+        return new RippleDrawable(ColorStateList.valueOf(0x40FFFFFF), rounded(fill, radius), null);
+    }
+
+    /**
+     * Small "press" feedback: the view shrinks a little on touch down and
+     * springs back with a slight overshoot on release. Returns false so the
+     * regular click listener still fires.
+     */
+    private static void pressable(View view) {
+        view.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    v.animate().cancel();
+                    v.animate().scaleX(0.9f).scaleY(0.9f)
+                            .setDuration(90)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .start();
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.animate().cancel();
+                    v.animate().scaleX(1f).scaleY(1f)
+                            .setDuration(240)
+                            .setInterpolator(new OvershootInterpolator(2.5f))
+                            .start();
+                    break;
+            }
+            return false;
+        });
+    }
+
+    /** Pops an icon after its glyph changed (play/pause, like/unlike). */
+    private static void pop(View view) {
+        view.animate().cancel();
+        view.setScaleX(0.7f);
+        view.setScaleY(0.7f);
+        view.animate().scaleX(1f).scaleY(1f)
+                .setDuration(220)
+                .setInterpolator(new OvershootInterpolator(3f))
+                .start();
+    }
+
+    private void showMiniPlayerAnimated() {
+        if (miniPlayer.getVisibility() != View.VISIBLE) {
+            miniPlayer.setVisibility(View.VISIBLE);
+            miniPlayer.setAlpha(0f);
+            miniPlayer.setTranslationY(dp(14));
+        }
+        miniPlayer.animate().cancel();
+        miniPlayer.animate().alpha(1f).translationY(0f)
+                .setDuration(220)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
     }
 
     // --------------------------------------------------------------- behaviour
@@ -435,7 +503,14 @@ public class DeltamentMusicSheet extends BottomSheet {
     }
 
     private void setStatus(String text) {
-        statusView.setText(text == null ? "" : text);
+        final String next = text == null ? "" : text;
+        if (!next.equals(statusView.getText().toString())) {
+            statusView.animate().cancel();
+            statusView.animate().alpha(0f).setDuration(80).withEndAction(() -> {
+                statusView.setText(next);
+                statusView.animate().alpha(1f).setDuration(140).start();
+            }).start();
+        }
     }
 
     private void renderTracks(ArrayList<DeltamentSoundCloudClient.Track> tracks) {
@@ -452,7 +527,7 @@ public class DeltamentMusicSheet extends BottomSheet {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(8), dp(8), dp(8), dp(8));
-        row.setBackground(rounded(0x00000000, dp(12)));
+        row.setBackground(ripple(0x00000000, dp(12)));
         row.setOnClickListener(v -> {
             if (track.album) {
                 openAlbum(track);
@@ -509,7 +584,9 @@ public class DeltamentMusicSheet extends BottomSheet {
                 final boolean nowLiked = isLiked(track.id);
                 like.setText(nowLiked ? "♥" : "♡");
                 like.setTextColor(nowLiked ? COLOR_BLUE : COLOR_TEXT_SECONDARY);
+                pop(like);
             });
+            pressable(like);
             row.addView(like, LayoutHelper.createLinear(36, 36));
 
             final TextView duration = new TextView(context);
@@ -619,6 +696,7 @@ public class DeltamentMusicSheet extends BottomSheet {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(8), dp(8), dp(8), dp(8));
+            row.setBackground(ripple(0x00000000, dp(12)));
             row.setOnClickListener(v -> {
                 final MediaController.PlaylistGlobalSearchParams params =
                         new MediaController.PlaylistGlobalSearchParams(query, 0, 0, 0,
@@ -688,8 +766,9 @@ public class DeltamentMusicSheet extends BottomSheet {
         queueIndex = existing;
         currentTrack = track;
         miniTitle.setText(track.title);
-        miniPlayer.setVisibility(View.VISIBLE);
+        showMiniPlayerAnimated();
         miniControl.setText("…");
+        pop(miniControl);
         setStatus("загрузка трека…");
 
         DeltamentSoundCloudClient.resolveStreamUrl(track, new DeltamentSoundCloudClient.Callback<String>() {
@@ -721,6 +800,7 @@ public class DeltamentMusicSheet extends BottomSheet {
                         prepared = true;
                         playing = player.isPlaying();
                         miniControl.setText("⏸");
+                        pop(miniControl);
                         setStatus("");
                     } else if (state == Player.STATE_ENDED) {
                         playNext();
@@ -763,6 +843,7 @@ public class DeltamentMusicSheet extends BottomSheet {
                 playing = true;
                 miniControl.setText("⏸");
             }
+            pop(miniControl);
         } catch (Throwable e) {
             FileLog.e(e);
         }
@@ -781,7 +862,17 @@ public class DeltamentMusicSheet extends BottomSheet {
 
     private void stopPlayback() {
         releasePlayer();
-        miniPlayer.setVisibility(View.GONE);
+        if (miniPlayer.getVisibility() == View.VISIBLE) {
+            miniPlayer.animate().cancel();
+            miniPlayer.animate().alpha(0f).translationY(dp(10))
+                    .setDuration(160)
+                    .withEndAction(() -> {
+                        miniPlayer.setVisibility(View.GONE);
+                        miniPlayer.setAlpha(1f);
+                        miniPlayer.setTranslationY(0f);
+                    })
+                    .start();
+        }
         currentTrack = null;
         queueIndex = -1;
     }
@@ -839,7 +930,9 @@ public class DeltamentMusicSheet extends BottomSheet {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(8), dp(10), dp(8), dp(10));
             if (i == queueIndex) {
-                row.setBackground(rounded(0xFF2A2A2D, dp(12)));
+                row.setBackground(ripple(0xFF2A2A2D, dp(12)));
+            } else {
+                row.setBackground(ripple(0x00000000, dp(12)));
             }
             row.setOnClickListener(v -> {
                 queueIndex = indexOfTrack(track);
@@ -887,6 +980,7 @@ public class DeltamentMusicSheet extends BottomSheet {
                 }
                 renderQueue();
             });
+            pressable(remove);
             row.addView(remove, LayoutHelper.createLinear(36, 36));
             listContainer.addView(row);
         }
@@ -1063,6 +1157,8 @@ public class DeltamentMusicSheet extends BottomSheet {
         private final Paint selectedTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final float radius;
         private int selected;
+        private float selectedAnim;
+        private ValueAnimator selectedAnimator;
         private Listener listener;
 
         SegmentRow(Context context, String[] labels) {
@@ -1091,7 +1187,27 @@ public class DeltamentMusicSheet extends BottomSheet {
         }
 
         void setSelected(int index, boolean notify) {
-            selected = Math.max(0, Math.min(labels.length - 1, index));
+            final int next = Math.max(0, Math.min(labels.length - 1, index));
+            if (next != selected) {
+                if (selectedAnimator != null) {
+                    selectedAnimator.cancel();
+                }
+                if (isAttachedToWindow()) {
+                    selectedAnimator = ValueAnimator.ofFloat(selectedAnim, next);
+                    selectedAnimator.setDuration(220);
+                    selectedAnimator.setInterpolator(new DecelerateInterpolator());
+                    selectedAnimator.addUpdateListener(animation -> {
+                        selectedAnim = (float) animation.getAnimatedValue();
+                        invalidate();
+                    });
+                    selectedAnimator.start();
+                } else {
+                    selectedAnim = next;
+                }
+            } else {
+                selectedAnim = next;
+            }
+            selected = next;
             invalidate();
             if (notify && listener != null) {
                 listener.onSelected(selected);
@@ -1113,7 +1229,7 @@ public class DeltamentMusicSheet extends BottomSheet {
             canvas.drawRoundRect(0, 0, width, height, radius, radius, backgroundPaint);
 
             final float segment = width / labels.length;
-            final float left = selected * segment;
+            final float left = selectedAnim * segment;
             final float right = left + segment;
             canvas.drawRoundRect(left + inset, inset, right - inset, height - inset,
                     (height - inset * 2) / 2f, (height - inset * 2) / 2f, selectedPaint);
@@ -1127,6 +1243,20 @@ public class DeltamentMusicSheet extends BottomSheet {
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                animate().cancel();
+                animate().scaleX(0.97f).scaleY(0.97f)
+                        .setDuration(90)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
+            } else if (event.getAction() == MotionEvent.ACTION_UP
+                    || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                animate().cancel();
+                animate().scaleX(1f).scaleY(1f)
+                        .setDuration(240)
+                        .setInterpolator(new OvershootInterpolator(2f))
+                        .start();
+            }
             if (event.getAction() == MotionEvent.ACTION_UP) {
                 final int index = Math.max(0, Math.min(labels.length - 1,
                         (int) (event.getX() / (getWidth() / (float) labels.length))));
