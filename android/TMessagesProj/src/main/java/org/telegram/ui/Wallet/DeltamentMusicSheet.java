@@ -165,14 +165,14 @@ public class DeltamentMusicSheet extends BottomSheet {
         DeltamentSoundCloudClient.preload(new DeltamentSoundCloudClient.Callback<Boolean>() {
             @Override
             public void onSuccess(Boolean result) {
-                if (source == SOURCE_SOUNDCLOUD && visible.isEmpty()) {
+                if (source == SOURCE_SOUNDCLOUD && mode == MODE_SEARCH && visible.isEmpty() && TextUtils.isEmpty(query())) {
                     statusView.setText("введите запрос");
                 }
             }
 
             @Override
             public void onError(String message) {
-                if (source == SOURCE_SOUNDCLOUD) {
+                if (source == SOURCE_SOUNDCLOUD && mode == MODE_SEARCH && visible.isEmpty() && TextUtils.isEmpty(query())) {
                     statusView.setText(message);
                 }
             }
