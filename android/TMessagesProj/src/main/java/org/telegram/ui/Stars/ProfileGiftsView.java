@@ -169,7 +169,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.starUserGiftsLoaded);
 
-        cancelLongPress();
+        cancelDragLongPress();
         finishDrag(false);
 
         for (Gift gift : gifts) {
@@ -617,20 +617,20 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 final float dy = event.getY() - downY;
                 final float slop = AndroidUtilities.touchSlop;
                 if (dx * dx + dy * dy > slop * slop) {
-                    cancelLongPress();
+                    cancelDragLongPress();
                     pressedGift.bounce.setPressed(false);
                     pressedGift = null;
                 }
             }
         } else if (action == MotionEvent.ACTION_UP) {
-            cancelLongPress();
+            cancelDragLongPress();
             if (pressedGift != null) {
                 onGiftClick(pressedGift);
                 pressedGift.bounce.setPressed(false);
                 pressedGift = null;
             }
         } else if (action == MotionEvent.ACTION_CANCEL) {
-            cancelLongPress();
+            cancelDragLongPress();
             if (pressedGift != null) {
                 pressedGift.bounce.setPressed(false);
                 pressedGift = null;
@@ -677,7 +677,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         invalidate();
     }
 
-    private void cancelLongPress() {
+    private void cancelDragLongPress() {
         if (dragLongPressPosted) {
             dragLongPressPosted = false;
             removeCallbacks(dragLongPressRunnable);
