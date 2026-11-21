@@ -142,14 +142,18 @@ func (a *API) cardSetBanner(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, a.Log, domain.ErrUnauthorized)
 		return
 	}
-	mime := strings.TrimSpace(r.Header.Get("Content-Type"))
-	if !strings.HasPrefix(mime, "image/") {
+	if !strings.HasPrefix(strings.TrimSpace(r.Header.Get("Content-Type")), "image/") {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 3<<20)
 	data, err := io.ReadAll(r.Body)
 	if err != nil || len(data) < 128 {
+		writeErr(w, a.Log, domain.ErrInvalid)
+		return
+	}
+	data, mime, err := normalizeBannerCover(data)
+	if err != nil {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}
