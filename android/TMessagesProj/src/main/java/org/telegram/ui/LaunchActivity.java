@@ -7152,7 +7152,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         if (UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService != null) {
             showTosActivity(UserConfig.selectedAccount, UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService);
-        } else if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
+        } else if (!ApplicationLoader.applicationContext.getPackageName().startsWith("org.deltagram.android")
+                && SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
         checkAppUpdate(false, null);
