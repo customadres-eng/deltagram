@@ -226,10 +226,18 @@ type BotVerification struct {
 
 // Projection returns the botVerification payload for full peer objects.
 func (v CustomVerification) Projection() BotVerification {
+	description := v.Description
+	if v.Peer.Type == PeerTypeChannel {
+		if organization := strings.TrimSpace(v.OrganizationName); organization != "" {
+			description = LocalizedChannelVerificationDescription("en", organization)
+		} else {
+			description = channelVerificationDescription(description)
+		}
+	}
 	return BotVerification{
 		BotID:       v.VerifierBotID,
 		Icon:        v.IconDocumentID,
-		Description: v.Description,
+		Description: description,
 	}
 }
 
@@ -238,13 +246,36 @@ func (v CustomVerification) Projection() BotVerification {
 func (v CustomVerification) ProjectionForLanguage(langCode string) BotVerification {
 	description := v.Description
 	if organization := strings.TrimSpace(v.OrganizationName); organization != "" {
-		description = LocalizedVerificationDescription(langCode, organization)
+		if v.Peer.Type == PeerTypeChannel {
+			description = LocalizedChannelVerificationDescription(langCode, organization)
+		} else {
+			description = LocalizedVerificationDescription(langCode, organization)
+		}
+	} else if v.Peer.Type == PeerTypeChannel {
+		description = channelVerificationDescription(description)
 	}
 	return BotVerification{
 		BotID:       v.VerifierBotID,
 		Icon:        v.IconDocumentID,
 		Description: description,
 	}
+}
+
+// channelVerificationDescription rewrites the legacy stored "account" sentence
+// for marks granted to channels before channel-specific wording existed.
+func channelVerificationDescription(description string) string {
+	replacements := []struct{ old, new string }{
+		{"Аккаунт", "Канал"},
+		{"аккаунт", "канал"},
+		{"Акаунт", "Канал"},
+		{"акаунт", "канал"},
+		{"Account", "Channel"},
+		{"account", "channel"},
+	}
+	for _, replacement := range replacements {
+		description = strings.ReplaceAll(description, replacement.old, replacement.new)
+	}
+	return description
 }
 
 // LocalizedVerificationDescription renders the protocol sentence for one

@@ -5,6 +5,8 @@ import (
 	"math"
 
 	"github.com/iamxvbaba/td/tg"
+
+	"telesrv/internal/domain"
 )
 
 type privateContactRequirement struct {
@@ -102,36 +104,60 @@ func (r *Router) ensurePrivateContactAllowed(
 	ctx context.Context,
 	senderUserID, recipientUserID, allowPaidStars int64,
 	messageCount int,
-) error {
+) (int64, error) {
 	if allowPaidStars < 0 || messageCount < 1 {
-		return starsAmountInvalidErr()
+		return 0, starsAmountInvalidErr()
 	}
 	requirement, err := r.privateContactRestrictionFor(ctx, senderUserID, recipientUserID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if requirement.requirePremium {
 		premium, err := r.viewerIsPremiumForPrivacy(ctx, senderUserID)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if !premium {
-			return premiumAccountRequiredErr()
+			return 0, premiumAccountRequiredErr()
 		}
-		return nil
+		return 0, nil
 	}
 	if requirement.paidStars <= 0 {
-		return nil
+		return 0, nil
 	}
 	if requirement.paidStars > math.MaxInt64/int64(messageCount) {
-		return starsAmountInvalidErr()
+		return 0, starsAmountInvalidErr()
 	}
 	required := requirement.paidStars * int64(messageCount)
 	if allowPaidStars < required {
-		return allowPaymentRequiredErr(required)
+		return 0, allowPaymentRequiredErr(required)
 	}
-	// The privacy gate and no-paid exception are complete here. The separate
-	// private paid-message ledger is not part of the current message store yet;
-	// never accept an authorization without an atomic debit.
-	return paymentUnsupportedErr()
+	// Return the per-message price. Callers debit it atomically with the send
+	// and refund on failure; a client that authorized the total may send the
+	// full batch, and a retry is stopped by the message random_id replay check.
+	return requirement.paidStars, nil
+}
+
+// debitPaidMessage charges one authorized private paid message. The caller
+// refunds it if the underlying send fails or turns out to be a duplicate.
+func (r *Router) debitPaidMessage(ctx context.Context, senderUserID, recipientUserID, stars int64) (bool, error) {
+	if stars <= 0 {
+		return false, nil
+	}
+	if r.deps.Stars == nil {
+		return false, paymentUnsupportedErr()
+	}
+	if _, err := r.deps.Stars.Debit(ctx, senderUserID, stars, domain.StarsReasonPaidMessage,
+		domain.Peer{Type: domain.PeerTypeUser, ID: recipientUserID}, "Paid message", ""); err != nil {
+		return false, starsErr(err)
+	}
+	return true, nil
+}
+
+func (r *Router) refundPaidMessage(ctx context.Context, senderUserID, recipientUserID, stars int64) {
+	if stars <= 0 || r.deps.Stars == nil {
+		return
+	}
+	_, _ = r.deps.Stars.Credit(ctx, senderUserID, stars, domain.StarsReasonPaidMessage,
+		domain.Peer{Type: domain.PeerTypeUser, ID: recipientUserID}, "Paid message refund", "")
 }

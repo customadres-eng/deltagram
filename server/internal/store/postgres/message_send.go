@@ -839,12 +839,23 @@ func (s *MessageStore) resolvePrivateSendReply(ctx context.Context, db sqlcgen.D
 		reply.Peer = peer
 		return reply, cloneMessageReply(reply), nil
 	}
-	source, err := q.GetMessageBoxForReply(ctx, sqlcgen.GetMessageBoxForReplyParams{
-		OwnerUserID: req.SenderUserID,
-		PeerType:    string(peer.Type),
-		PeerID:      peer.ID,
-		BoxID:       int32(req.ReplyTo.MessageID),
-	})
+	lookupReply := func(peerID int64) (sqlcgen.GetMessageBoxForReplyRow, error) {
+		return q.GetMessageBoxForReply(ctx, sqlcgen.GetMessageBoxForReplyParams{
+			OwnerUserID: req.SenderUserID,
+			PeerType:    string(domain.PeerTypeUser),
+			PeerID:      peerID,
+			BoxID:       int32(req.ReplyTo.MessageID),
+		})
+	}
+	source, err := lookupReply(peer.ID)
+	if errors.Is(err, pgx.ErrNoRows) && peer.ID != req.RecipientUserID {
+		// Some clients put the sender instead of the dialog partner into
+		// inputReplyToMessage.reply_to_peer_id. The source box belongs to the
+		// authenticated sender either way; retry with the actual recipient before
+		// rejecting the reply.
+		peer = domain.Peer{Type: domain.PeerTypeUser, ID: req.RecipientUserID}
+		source, err = lookupReply(peer.ID)
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, domain.ErrReplyMessageIDInvalid
