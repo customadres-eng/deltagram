@@ -13095,12 +13095,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private void pickBanner() {
         if (getParentActivity() == null) return;
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             startActivityForResult(Intent.createChooser(intent, LocaleController.getString(R.string.DeltaGramSetBanner)), 5002);
         } catch (Exception e) {
             FileLog.e(e);
+            try {
+                Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+                fallback.setType("image/*");
+                fallback.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivityForResult(Intent.createChooser(fallback, LocaleController.getString(R.string.DeltaGramSetBanner)), 5002);
+            } catch (Exception second) {
+                FileLog.e(second);
+                BulletinFactory.of(this).createErrorBulletin("Не удалось открыть выбор фото").show();
+            }
         }
     }
 
@@ -13121,10 +13132,24 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 bitmap = BitmapFactory.decodeStream(is2, null, opts);
             }
             if (bitmap == null) return;
+            // Crop to the profile banner cover ratio before upload. Without this
+            // a tall photo is scaled by width and appears extremely zoomed in.
+            final int sourceW = bitmap.getWidth(), sourceH = bitmap.getHeight();
+            int cropW = sourceW, cropH = Math.max(1, Math.round(sourceW / 3f));
+            if (cropH > sourceH) {
+                cropH = sourceH;
+                cropW = Math.max(1, Math.round(sourceH * 3f));
+            }
+            final int cropX = Math.max(0, (sourceW - cropW) / 2);
+            final int cropY = Math.max(0, (sourceH - cropH) / 2);
+            if (cropW != sourceW || cropH != sourceH) {
+                Bitmap cropped = Bitmap.createBitmap(bitmap, cropX, cropY, cropW, cropH);
+                if (cropped != bitmap) bitmap.recycle();
+                bitmap = cropped;
+            }
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out);
             byte[] bytes = out.toByteArray();
-            int width = bitmap.getWidth(), height = bitmap.getHeight();
             bitmap.recycle();
             DeltagramCards.uploadBanner(currentAccount, bytes, "image/jpeg", (token, error) -> {
                 if (error != null) {
