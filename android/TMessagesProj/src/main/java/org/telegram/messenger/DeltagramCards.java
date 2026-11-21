@@ -46,6 +46,10 @@ public final class DeltagramCards {
         public long nftRowId;
         public String nftSlug = "";
         public int nftNum;
+        public float nftX = 0.5f;
+        public float nftY = 0.5f;
+        public float nftScale = 0.231f;
+        public float nftRotation;
 
         public String nftUrl() {
             if (nftRowId <= 0 || TextUtils.isEmpty(nftSlug) || nftNum <= 0) {
@@ -73,6 +77,10 @@ public final class DeltagramCards {
     public static class Prefs {
         public int colorId = -1;
         public long nftRowId;
+        public float nftX = 0.5f;
+        public float nftY = 0.5f;
+        public float nftScale = 0.231f;
+        public float nftRotation;
     }
 
     private static final Map<Long, PublicCard> cards = new HashMap<>();
@@ -142,15 +150,23 @@ public final class DeltagramCards {
             Prefs p = new Prefs();
             p.colorId = json.optInt("color_id", -1);
             p.nftRowId = json.optLong("nft_row_id");
+            p.nftX = (float) json.optDouble("nft_x", 0.5);
+            p.nftY = (float) json.optDouble("nft_y", 0.5);
+            p.nftScale = (float) json.optDouble("nft_scale", 0.231);
+            p.nftRotation = (float) json.optDouble("nft_rotation", 0);
             return p;
         }, callback);
     }
 
-    public static void savePrefs(int account, int colorId, long nftRowId, Callback<Prefs> callback) {
+    public static void savePrefs(int account, int colorId, long nftRowId, float nftX, float nftY, float nftScale, float nftRotation, Callback<Prefs> callback) {
         JSONObject body = new JSONObject();
         try {
             body.put("color_id", colorId);
             body.put("nft_row_id", nftRowId);
+            body.put("nft_x", nftX);
+            body.put("nft_y", nftY);
+            body.put("nft_scale", nftScale);
+            body.put("nft_rotation", nftRotation);
         } catch (Exception ignored) {
         }
         post(account, "/api/cards/prefs", body, json -> {
@@ -239,6 +255,10 @@ public final class DeltagramCards {
         card.nftRowId = json.optLong("nft_row_id");
         card.nftSlug = json.optString("nft_slug");
         card.nftNum = json.optInt("nft_num");
+        card.nftX = (float) json.optDouble("nft_x", 0.5);
+        card.nftY = (float) json.optDouble("nft_y", 0.5);
+        card.nftScale = (float) json.optDouble("nft_scale", 0.231);
+        card.nftRotation = (float) json.optDouble("nft_rotation", 0);
         return card;
     }
 

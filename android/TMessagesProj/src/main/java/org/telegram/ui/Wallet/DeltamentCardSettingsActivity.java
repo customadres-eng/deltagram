@@ -40,7 +40,12 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
     private final int currentAccount = UserConfig.selectedAccount;
     private int colorId = -1;
     private long nftRowId;
+    private float nftX = 0.5f;
+    private float nftY = 0.5f;
+    private float nftScale = 0.231f;
+    private float nftRotation;
     private WalletCardComponent preview;
+    private DeltamentNftSticker nftSticker;
     private LinearLayout colorsRow;
     private LinearLayout nftsRow;
     private ButtonWithCounterView saveButton;
@@ -76,6 +81,13 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
         preview.setCardNumber("GRAM " + UserConfig.getInstance(currentAccount).getClientUserId());
         preview.setDiamondOnCard(true);
         previewBox.addView(preview, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        nftSticker = new DeltamentNftSticker(context, preview, true);
+        nftSticker.setOnChanged(() -> {
+            nftX = nftSticker.getNftX();
+            nftY = nftSticker.getNftY();
+            nftScale = nftSticker.getNftScale();
+            nftRotation = nftSticker.getNftRotation();
+        });
         content.addView(previewBox, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         TextView note = new TextView(context);
@@ -148,6 +160,10 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
             if (p != null) {
                 colorId = p.colorId;
                 nftRowId = p.nftRowId;
+                nftX = p.nftX;
+                nftY = p.nftY;
+                nftScale = p.nftScale;
+                nftRotation = p.nftRotation;
                 applyPreview();
                 updateColorSelection();
             }
@@ -295,13 +311,13 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
     private void applyPreview() {
         if (preview == null) return;
         DeltamentCardStyle.apply(preview, colorId);
-        DeltamentCardStyle.applyNft(preview, nftRowId == 0 ? null : nftUrls.get(nftRowId));
+        nftSticker.setNft(nftRowId == 0 ? null : nftUrls.get(nftRowId), nftX, nftY, nftScale, nftRotation);
         if (nftRowId > 0) updateNftSelection();
     }
 
     private void save() {
         saveButton.setLoading(true);
-        DeltagramCards.savePrefs(currentAccount, colorId, nftRowId, (p, error) -> {
+        DeltagramCards.savePrefs(currentAccount, colorId, nftRowId, nftX, nftY, nftScale, nftRotation, (p, error) -> {
             saveButton.setLoading(false);
             if (error != null) {
                 BulletinFactory.of(this).createErrorBulletin(error).show();

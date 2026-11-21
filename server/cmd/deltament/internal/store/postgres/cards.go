@@ -21,7 +21,11 @@ func (db *DB) CardRegistry(ctx context.Context) ([]domain.CardPublic, error) {
 		       COALESCE(p.color_id, -1),
 		       COALESCE(p.nft_row_id, 0),
 		       COALESCE(p.nft_slug, ''),
-		       COALESCE(p.nft_num, 0)
+		       COALESCE(p.nft_num, 0),
+		       COALESCE(p.nft_x, 0.5),
+		       COALESCE(p.nft_y, 0.5),
+		       COALESCE(p.nft_scale, 0.231),
+		       COALESCE(p.nft_rotation, 0)
 		FROM users u
 		LEFT JOIN ton_balances tb ON tb.user_id = u.id
 		LEFT JOIN stars_balances sb ON sb.user_id = u.id
@@ -38,7 +42,8 @@ func (db *DB) CardRegistry(ctx context.Context) ([]domain.CardPublic, error) {
 	for rows.Next() {
 		var c domain.CardPublic
 		if err := rows.Scan(&c.UserID, &c.Name, &c.Username, &c.TON, &c.Stars, &c.TONAddress,
-			&c.ColorID, &c.NFTRowID, &c.NFTSlug, &c.NFTNum); err != nil {
+			&c.ColorID, &c.NFTRowID, &c.NFTSlug, &c.NFTNum,
+			&c.NFTX, &c.NFTY, &c.NFTScale, &c.NFTRotation); err != nil {
 			return nil, wrap(err)
 		}
 		out = append(out, c)
@@ -49,23 +54,32 @@ func (db *DB) CardRegistry(ctx context.Context) ([]domain.CardPublic, error) {
 func (db *DB) CardPrefs(ctx context.Context, userID int64) (domain.CardPrefs, error) {
 	var p domain.CardPrefs
 	err := db.q.QueryRow(ctx, `
-		SELECT user_id, color_id, nft_row_id, nft_slug, nft_num, updated_at
+		SELECT user_id, color_id, nft_row_id, nft_slug, nft_num,
+		       nft_x, nft_y, nft_scale, nft_rotation, updated_at
 		FROM deltament_card_prefs WHERE user_id = $1`, userID).
-		Scan(&p.UserID, &p.ColorID, &p.NFTRowID, &p.NFTSlug, &p.NFTNum, &p.UpdatedAt)
+		Scan(&p.UserID, &p.ColorID, &p.NFTRowID, &p.NFTSlug, &p.NFTNum,
+			&p.NFTX, &p.NFTY, &p.NFTScale, &p.NFTRotation, &p.UpdatedAt)
 	return p, wrap(err)
 }
 
 func (db *DB) SetCardPrefs(ctx context.Context, p domain.CardPrefs) error {
 	_, err := db.q.Exec(ctx, `
-		INSERT INTO deltament_card_prefs (user_id, color_id, nft_row_id, nft_slug, nft_num, updated_at)
-		VALUES ($1, $2, $3, $4, $5, now())
+		INSERT INTO deltament_card_prefs
+			(user_id, color_id, nft_row_id, nft_slug, nft_num,
+			 nft_x, nft_y, nft_scale, nft_rotation, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 		ON CONFLICT (user_id) DO UPDATE SET
 			color_id = EXCLUDED.color_id,
 			nft_row_id = EXCLUDED.nft_row_id,
 			nft_slug = EXCLUDED.nft_slug,
 			nft_num = EXCLUDED.nft_num,
+			nft_x = EXCLUDED.nft_x,
+			nft_y = EXCLUDED.nft_y,
+			nft_scale = EXCLUDED.nft_scale,
+			nft_rotation = EXCLUDED.nft_rotation,
 			updated_at = now()`,
-		p.UserID, p.ColorID, p.NFTRowID, p.NFTSlug, p.NFTNum)
+		p.UserID, p.ColorID, p.NFTRowID, p.NFTSlug, p.NFTNum,
+		p.NFTX, p.NFTY, p.NFTScale, p.NFTRotation)
 	return wrap(err)
 }
 

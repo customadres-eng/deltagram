@@ -54,6 +54,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
 
     private final WalletCardComponent tonCard;
     private final WalletCardComponent starsCard;
+    private final DeltamentNftSticker tonNft;
 
     private int active;
     private long tonBalance;
@@ -78,6 +79,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         tonCard.setDiamondOnCard(true);
         tonCard.setUseGyroscope(1f);
         tonCard.setOnClickListener(v -> showCardQr(false));
+        tonNft = new DeltamentNftSticker(context, tonCard, false);
 
         starsCard = new WalletCardComponent(context);
         starsCard.setCardHolder("DELTA");
@@ -241,7 +243,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
             return;
         }
         DeltamentCardStyle.apply(tonCard, own.colorId);
-        DeltamentCardStyle.applyNft(tonCard, own.nftUrl());
+        tonNft.setNft(own.nftUrl(), own.nftX, own.nftY, own.nftScale, own.nftRotation);
         if (!TextUtils.isEmpty(own.tonAddress)) {
             if (own.tonAddress.toLowerCase().endsWith(".ton")) {
                 tonCard.setCardNumber(own.tonAddress.toUpperCase());

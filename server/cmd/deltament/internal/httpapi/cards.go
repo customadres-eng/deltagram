@@ -34,8 +34,12 @@ func (a *API) cardPrefs(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) cardSetPrefs(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		ColorID  int   `json:"color_id"`
-		NFTRowID int64 `json:"nft_row_id"`
+		ColorID    int     `json:"color_id"`
+		NFTRowID   int64   `json:"nft_row_id"`
+		NFTX       float64 `json:"nft_x"`
+		NFTY       float64 `json:"nft_y"`
+		NFTScale   float64 `json:"nft_scale"`
+		NFTRotation float64 `json:"nft_rotation"`
 	}
 	if !readJSON(w, r, &in) {
 		return
@@ -45,7 +49,13 @@ func (a *API) cardSetPrefs(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, a.Log, domain.ErrUnauthorized)
 		return
 	}
-	p, err := a.Cards.SetPrefs(r.Context(), userID, in.ColorID, in.NFTRowID)
+	if in.NFTScale == 0 {
+		in.NFTScale = 0.231
+	}
+	if in.NFTX == 0 && in.NFTY == 0 {
+		in.NFTX, in.NFTY = 0.5, 0.5
+	}
+	p, err := a.Cards.SetPrefs(r.Context(), userID, in.ColorID, in.NFTRowID, in.NFTX, in.NFTY, in.NFTScale, in.NFTRotation)
 	if err != nil {
 		writeErr(w, a.Log, err)
 		return
@@ -156,7 +166,11 @@ func cardPrefsView(p domain.CardPrefs) map[string]any {
 		"user_id":    p.UserID,
 		"color_id":   p.ColorID,
 		"nft_row_id": p.NFTRowID,
-		"nft_slug":   p.NFTSlug,
-		"nft_num":    p.NFTNum,
+		"nft_slug":     p.NFTSlug,
+		"nft_num":      p.NFTNum,
+		"nft_x":        p.NFTX,
+		"nft_y":        p.NFTY,
+		"nft_scale":    p.NFTScale,
+		"nft_rotation": p.NFTRotation,
 	}
 }

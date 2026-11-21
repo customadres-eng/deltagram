@@ -3900,8 +3900,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             musicView = new ProfileMusicView(context, resourcesProvider);
             balanceView = new ProfileBalanceView(context, resourcesProvider);
             musicView.setTrailingView(balanceView);
-            balanceView.setOnSegmentClickListeners(v -> openCardsSheet(), v -> openCardsSheet());
-            balanceView.setOnClickListener(v -> openCardsSheet());
+            balanceView.setOnClickListener(v -> {
+                int tappedKind = balanceView.tappedKind();
+                if (tappedKind < 0) {
+                    return;
+                }
+                openCardsSheet(tappedKind);
+            });
             if (avatarsBlurView != null) {
                 avatarsBlurView.setMusicView(musicView);
             }
@@ -9655,11 +9660,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 has = true;
             }
         }
-        balanceView.setCards(ton, stars);
+        balanceView.setBalance(ton, stars);
         balanceView.setVisibility(has ? View.VISIBLE : View.GONE);
     }
 
-    private void openCardsSheet() {
+    private void openCardsSheet(int kind) {
         DeltagramCards.PublicCard publicCard = DeltagramCards.cardFor(userId);
         if (publicCard == null || getParentActivity() == null) {
             DeltagramCards.refreshRegistry(currentAccount);

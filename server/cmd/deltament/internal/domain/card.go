@@ -9,6 +9,10 @@ type CardPrefs struct {
 	NFTRowID  int64
 	NFTSlug   string
 	NFTNum    int
+	NFTX       float64
+	NFTY       float64
+	NFTScale   float64
+	NFTRotation float64
 	UpdatedAt time.Time
 }
 
@@ -25,4 +29,8 @@ type CardPublic struct {
 	NFTRowID int64  `json:"nft_row_id"`
 	NFTSlug  string `json:"nft_slug"`
 	NFTNum   int    `json:"nft_num"`
+	NFTX       float64 `json:"nft_x"`
+	NFTY       float64 `json:"nft_y"`
+	NFTScale   float64 `json:"nft_scale"`
+	NFTRotation float64 `json:"nft_rotation"`
 }

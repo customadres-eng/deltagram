@@ -67,7 +67,7 @@ type Wallet interface {
 type Cards interface {
 	Registry(ctx context.Context) ([]domain.CardPublic, error)
 	Prefs(ctx context.Context, userID int64) (domain.CardPrefs, error)
-	SetPrefs(ctx context.Context, userID int64, colorID int, nftRowID int64) (domain.CardPrefs, error)
+	SetPrefs(ctx context.Context, userID int64, colorID int, nftRowID int64, nftX, nftY, nftScale, nftRotation float64) (domain.CardPrefs, error)
 	Nfts(ctx context.Context, userID int64) ([]domain.GiftAsset, error)
 	SetAddress(ctx context.Context, userID int64, address string) (domain.CardPublic, error)
 	Send(ctx context.Context, fromUserID int64, toUsername, kind string, amount int64) (domain.CardPublic, error)

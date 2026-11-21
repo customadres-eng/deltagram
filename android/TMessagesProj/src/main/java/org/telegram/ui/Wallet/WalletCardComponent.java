@@ -657,6 +657,14 @@ public class WalletCardComponent extends FrameLayout implements NotificationCent
         }
     }
 
+    public static String formatGrams(long amount) {
+        return SGAmounts.gram(amount);
+    }
+
+    public static String formatStars(long amount) {
+        return new DecimalFormat("#,##0", new DecimalFormatSymbols(Locale.US)).format(amount);
+    }
+
     static SpannableStringBuilder formatBalance(long nanotons) {
         final DecimalFormat format = new DecimalFormat("#,##0.#########", new DecimalFormatSymbols(Locale.US));
         // Share the wallet's rounding, then add grouping without rounding a second time.

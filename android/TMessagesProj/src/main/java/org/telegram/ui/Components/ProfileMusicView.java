@@ -72,6 +72,20 @@ public class ProfileMusicView extends View {
         bounds.offset(location[0], location[1]);
     }
 
+    public RectF getPillRect() {
+        return rect;
+    }
+
+    public void buildPillPath(Path path, RectF rectF) {
+        path.addRoundRect(rectF, rectF.height() / 2f, rectF.height() / 2f, Path.Direction.CW);
+    }
+
+    public int getGlassPills(RectF bounds, RectF first, RectF second) {
+        first.set(bounds);
+        second.setEmpty();
+        return 1;
+    }
+
     private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path clipPath = new Path();
     private final Path clipAvatarPath = new Path();
@@ -360,9 +374,11 @@ public class ProfileMusicView extends View {
         } else {
             backgroundPaint.setShadowLayer(0, 0, 0, 0);
         }
+        clipPath.rewind();
+        buildPillPath(clipPath, rect);
         int wasAlpha = backgroundPaint.getAlpha();
         backgroundPaint.setAlpha((int) (wasAlpha * alpha * bgAlpha));
-        canvas.drawRoundRect(rect, rect.height() / 2f, rect.height() / 2f, backgroundPaint);
+        canvas.drawPath(clipPath, backgroundPaint);
         backgroundPaint.setAlpha(wasAlpha);
         if (hasColorById && buttonColor != 0) {
             if (radialGradient == null || radialGradientWidth != rect.width()) {
@@ -377,11 +393,8 @@ public class ProfileMusicView extends View {
             matrix.setTranslate(rect.left, rect.top);
             radialGradient.setLocalMatrix(matrix);
             shaderPaint.setAlpha((int) (0xFF * alpha));
-            canvas.drawRoundRect(rect, rect.height() / 2f, rect.height() / 2f, shaderPaint);
+            canvas.drawPath(clipPath, shaderPaint);
         }
-
-        clipPath.rewind();
-        clipPath.addRoundRect(rect, rect.height() / 2f, rect.height() / 2f, Path.Direction.CW);
 
         canvas.save();
         canvas.clipPath(clipPath);

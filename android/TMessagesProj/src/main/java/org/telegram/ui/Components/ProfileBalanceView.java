@@ -1,124 +1,227 @@
 package org.telegram.ui.Components;
 
-import static org.telegram.messenger.AndroidUtilities.dp;
-import static org.telegram.messenger.AndroidUtilities.dpf2;
-import static org.telegram.messenger.LocaleController.getString;
-
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
-
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Wallet.GramWallet;
+import org.telegram.ui.Wallet.WalletCardComponent;
 
+/* loaded from: classes6.dex */
 public class ProfileBalanceView extends ProfileMusicView {
-
-    private final Drawable gramIcon;
-    private final Drawable starIcon;
-    private Text tonText;
-    private Text starsText;
-    private boolean hasCards;
+    private static final int CHEVRON_ROOM = 9;
+    private static final int DEAD_ZONE = 14;
+    private static final int GAP = 6;
+    private static final int PILL_PAD = 8;
+    private final Path chevron;
+    private final Paint chevronPaint;
+    private int downKind;
     private float ejectProgress;
-    private View.OnClickListener tonClickListener;
-    private View.OnClickListener starsClickListener;
+    private Text gramAmount;
+    private final ButtonBounce gramBounce;
+    private final Drawable gramColorIcon;
+    private final Drawable gramIcon;
+    private float lastTouchX;
+    private final Drawable starIcon;
+    private Text starsAmount;
+    private final ButtonBounce starsBounce;
 
-    private final Paint chevronPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Path chevron = new Path();
+    public float getPressScale() {
+        return 1.0f;
+    }
 
     public ProfileBalanceView(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context, resourcesProvider);
-        gramIcon = context.getResources().getDrawable(R.drawable.profile_balance_gram).mutate();
-        starIcon = context.getResources().getDrawable(R.drawable.star_small_inner).mutate();
-        starIcon.setColorFilter(new android.graphics.PorterDuffColorFilter(0xffffd45e, android.graphics.PorterDuff.Mode.SRC_IN));
-        chevronPaint.setStyle(Paint.Style.STROKE);
-        chevronPaint.setStrokeCap(Paint.Cap.ROUND);
-        chevronPaint.setStrokeJoin(Paint.Join.ROUND);
-        chevronPaint.setStrokeWidth(dpf2(1.16f));
-        chevron.moveTo(0, -dpf2(3.33f));
-        chevron.lineTo(dpf2(3.16f), 0);
-        chevron.lineTo(0, dpf2(3.33f));
-        setCards(0, 0);
+        Paint paint = new Paint(1);
+        this.chevronPaint = paint;
+        Path path = new Path();
+        this.chevron = path;
+        this.lastTouchX = -1.0f;
+        this.downKind = -1;
+        this.gramBounce = new ButtonBounce(this);
+        this.starsBounce = new ButtonBounce(this);
+        this.gramIcon = context.getResources().getDrawable(R.drawable.profile_balance_gram).mutate();
+        this.gramColorIcon = context.getResources().getDrawable(R.drawable.profile_balance_gram_color).mutate();
+        this.starIcon = context.getResources().getDrawable(R.drawable.star_small_inner).mutate();
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setStrokeWidth(AndroidUtilities.dpf2(1.16f));
+        path.moveTo(0.0f, -AndroidUtilities.dpf2(3.33f));
+        path.lineTo(AndroidUtilities.dpf2(3.16f), 0.0f);
+        path.lineTo(0.0f, AndroidUtilities.dpf2(3.33f));
+        setBalance(0L, 0L);
     }
 
-    public void setCards(long ton, long stars) {
-        tonText = new Text(GramWallet.formatGrams(ton), 11, AndroidUtilities.bold());
-        starsText = new Text(LocaleController.formatNumber(stars, ' '), 11, AndroidUtilities.bold());
-        hasCards = ton > 0 || stars > 0;
-        setContentDescription("GRAM " + GramWallet.formatGrams(ton) + ", Stars " + stars);
+    public void setBalance(long j, long j2) {
+        String formatGrams = WalletCardComponent.formatGrams(j);
+        String formatStars = WalletCardComponent.formatStars(j2);
+        this.gramAmount = new Text(formatGrams, 11.0f, AndroidUtilities.bold());
+        this.starsAmount = new Text(formatStars, 11.0f, AndroidUtilities.bold());
+        setContentDescription(LocaleController.getString(R.string.StarsBalance) + ": " + formatGrams + " GRAM, " + formatStars + " Stars");
         invalidate();
     }
 
-    public void setEjectProgress(float progress) {
-        if (ejectProgress == progress) return;
-        ejectProgress = progress;
-        invalidate();
+    private float gramPillEnd() {
+        return AndroidUtilities.dp(15.0f) + this.gramAmount.getWidth() + AndroidUtilities.dp(9.0f) + AndroidUtilities.dp(8.0f);
     }
 
-    public void setOnSegmentClickListeners(View.OnClickListener ton, View.OnClickListener stars) {
-        tonClickListener = ton;
-        starsClickListener = stars;
+    @Override // org.telegram.ui.Components.ProfileMusicView
+    public void buildPillPath(Path path, RectF rectF) {
+        float dp = rectF.left + AndroidUtilities.dp(8.0f) + gramPillEnd();
+        float height = rectF.height() / 2.0f;
+        float f = rectF.left;
+        float f2 = rectF.top;
+        float f3 = rectF.bottom;
+        Path.Direction direction = Path.Direction.CW;
+        path.addRoundRect(f, f2, dp, f3, height, height, direction);
+        path.addRoundRect(dp + AndroidUtilities.dp(6.0f), rectF.top, rectF.right, rectF.bottom, height, height, direction);
     }
 
-    @Override
-    protected float getContentWidth(float maxWidth) {
-        if (tonText == null || starsText == null) return dp(48);
-        tonText.ellipsize(-1);
-        starsText.ellipsize(-1);
-        return dp(4 + 13 + 2) + tonText.getWidth() + dp(5)
-                + dp(1) // divider
-                + dp(5 + 13 + 2) + starsText.getWidth() + dp(6);
+    @Override // org.telegram.ui.Components.ProfileMusicView
+    public int getGlassPills(RectF rectF, RectF rectF2, RectF rectF3) {
+        float dp = rectF.left + AndroidUtilities.dp(8.0f) + gramPillEnd();
+        rectF2.set(rectF.left, rectF.top, dp, rectF.bottom);
+        rectF3.set(dp + AndroidUtilities.dp(6.0f), rectF.top, rectF.right, rectF.bottom);
+        return 2;
     }
 
-    @Override
-    protected void drawContent(Canvas canvas, float alpha) {
-        if (tonText == null || starsText == null) return;
-        final float cy = getHeight() / 2f;
-        final int iconSize = dp(13);
-        canvas.translate(0, -dp(20) * ejectProgress);
-
-        canvas.translate(dp(4), 0);
-        gramIcon.setBounds(0, (int) cy - iconSize / 2, iconSize, (int) cy - iconSize / 2 + iconSize);
-        gramIcon.setAlpha((int) (255 * alpha));
-        gramIcon.draw(canvas);
-        canvas.translate(iconSize + dp(2), 0);
-        tonText.draw(canvas, 0, cy, textColor, alpha);
-        canvas.translate(tonText.getWidth() + dp(4.8f), cy);
-        chevronPaint.setColor(Theme.multAlpha(textColor, 0.85f * alpha));
-        canvas.drawPath(chevron, chevronPaint);
-
-        canvas.translate(dpf2(1.5f), -cy);
-        canvas.drawLine(0, cy - dp(5), 0, cy + dp(5), chevronPaint);
-        canvas.translate(dpf2(5), 0);
-
-        starIcon.setBounds(0, (int) cy - iconSize / 2, iconSize, (int) cy - iconSize / 2 + iconSize);
-        starIcon.setAlpha((int) (255 * alpha));
-        starIcon.draw(canvas);
-        canvas.translate(iconSize + dp(2), 0);
-        starsText.draw(canvas, 0, cy, textColor, alpha);
-        canvas.translate(starsText.getWidth() + dp(4.8f), cy);
-        canvas.drawPath(chevron, chevronPaint);
-    }
-
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
-        if (!hasCards) {
-            return super.dispatchTouchEvent(event);
+    @Override // org.telegram.ui.Components.ProfileMusicView, android.view.View
+    public boolean dispatchTouchEvent(MotionEvent motionEvent) {
+        if (motionEvent.getAction() == 0) {
+            this.lastTouchX = motionEvent.getX();
+            this.downKind = tappedKind();
         }
-        if (event.getAction() == MotionEvent.ACTION_UP) {
-            if (event.getX() < getWidth() / 2f) {
-                if (tonClickListener != null) tonClickListener.onClick(this);
-            } else {
-                if (starsClickListener != null) starsClickListener.onClick(this);
+        boolean dispatchTouchEvent = super.dispatchTouchEvent(motionEvent);
+        boolean z = false;
+        this.gramBounce.setPressed(dispatchTouchEvent && this.downKind == 0);
+        ButtonBounce buttonBounce = this.starsBounce;
+        if (dispatchTouchEvent && this.downKind == 1) {
+            z = true;
+        }
+        buttonBounce.setPressed(z);
+        return dispatchTouchEvent;
+    }
+
+    @Override // org.telegram.ui.Components.ProfileMusicView, android.view.View
+    public void onDraw(Canvas canvas) {
+        float scale = this.gramBounce.getScale(0.04f);
+        float scale2 = this.starsBounce.getScale(0.04f);
+        RectF pillRect = getPillRect();
+        if ((scale == 1.0f && scale2 == 1.0f) || pillRect == null || pillRect.width() <= 0.0f) {
+            super.onDraw(canvas);
+            return;
+        }
+        float dp = pillRect.left + AndroidUtilities.dp(8.0f) + gramPillEnd() + (AndroidUtilities.dp(6.0f) / 2.0f);
+        float height = getHeight() / 2.0f;
+        canvas.save();
+        canvas.clipRect(0.0f, 0.0f, dp, getHeight());
+        canvas.scale(scale, scale, (pillRect.left + dp) / 2.0f, height);
+        super.onDraw(canvas);
+        canvas.restore();
+        canvas.save();
+        canvas.clipRect(dp, 0.0f, getWidth(), getHeight());
+        canvas.scale(scale2, scale2, (dp + pillRect.right) / 2.0f, height);
+        super.onDraw(canvas);
+        canvas.restore();
+    }
+
+    public int tappedKind() {
+        RectF pillRect = getPillRect();
+        if (pillRect == null || this.lastTouchX < 0.0f) {
+            return 0;
+        }
+        float dp = pillRect.left + AndroidUtilities.dp(8.0f) + gramPillEnd() + (AndroidUtilities.dp(6.0f) / 2.0f);
+        if (Math.abs(this.lastTouchX - dp) < AndroidUtilities.dp(14.0f)) {
+            return -1;
+        }
+        return this.lastTouchX < dp ? 0 : 1;
+    }
+
+    public boolean getChipBoundsOnScreen(int i, RectF rectF) {
+        float[] fArr;
+        RectF pillRect = getPillRect();
+        if (pillRect == null || pillRect.width() <= 0.0f || pillRect.height() <= 0.0f || !isAttachedToWindow()) {
+            return false;
+        }
+        float dp = pillRect.left + AndroidUtilities.dp(8.0f) + gramPillEnd();
+        if (i == 1) {
+            fArr = new float[]{Math.min(pillRect.right, dp + AndroidUtilities.dp(6.0f)), pillRect.top, pillRect.right, pillRect.bottom};
+        } else {
+            fArr = new float[]{pillRect.left, pillRect.top, Math.min(pillRect.right, dp), pillRect.bottom};
+        }
+        View view = this;
+        while (true) {
+            view.getMatrix().mapPoints(fArr);
+            float left = view.getLeft() - view.getScrollX();
+            float top = view.getTop() - view.getScrollY();
+            fArr[0] = fArr[0] + left;
+            fArr[2] = fArr[2] + left;
+            fArr[1] = fArr[1] + top;
+            fArr[3] = fArr[3] + top;
+            if (!(view.getParent() instanceof View)) {
+                break;
             }
-            return true;
+            view = (View) view.getParent();
         }
-        return true;
+        int[] iArr = new int[2];
+        view.getLocationOnScreen(iArr);
+        float left2 = iArr[0] - view.getLeft();
+        float top2 = iArr[1] - view.getTop();
+        rectF.set(Math.min(fArr[0], fArr[2]) + left2, Math.min(fArr[1], fArr[3]) + top2, Math.max(fArr[0], fArr[2]) + left2, Math.max(fArr[1], fArr[3]) + top2);
+        return rectF.width() > 0.0f && rectF.height() > 0.0f;
+    }
+
+    public void setEjectProgress(float f) {
+        if (this.ejectProgress == f) {
+            return;
+        }
+        this.ejectProgress = f;
+        invalidate();
+    }
+
+    @Override // org.telegram.ui.Components.ProfileMusicView
+    public float getContentWidth(float f) {
+        this.gramAmount.ellipsize(-1.0f);
+        this.starsAmount.ellipsize(-1.0f);
+        return AndroidUtilities.dp(15.0f) + AndroidUtilities.dp(9.0f) + AndroidUtilities.dp(22.0f) + AndroidUtilities.dp(15.0f) + AndroidUtilities.dp(9.0f) + this.gramAmount.getWidth() + this.starsAmount.getWidth();
+    }
+
+    @Override // org.telegram.ui.Components.ProfileMusicView
+    public void drawContent(Canvas canvas, float f) {
+        float height = getHeight() / 2.0f;
+        canvas.translate(0.0f, (-AndroidUtilities.dp(20.0f)) * this.ejectProgress);
+        int dp = AndroidUtilities.dp(13.0f);
+        Drawable drawable = (this.hasProfileColor || isOnProfilePhoto()) ? this.gramColorIcon : this.gramIcon;
+        int i = ((int) height) - (dp / 2);
+        int i2 = i + dp;
+        drawable.setBounds(0, i, dp, i2);
+        int i3 = (int) (255.0f * f);
+        drawable.setAlpha(i3);
+        drawable.draw(canvas);
+        canvas.translate(AndroidUtilities.dp(2.0f) + dp, 0.0f);
+        this.gramAmount.draw(canvas, 0.0f, height, this.textColor, f);
+        canvas.save();
+        canvas.translate(this.gramAmount.getWidth() + AndroidUtilities.dpf2(4.8f), height);
+        float f2 = f * 0.85f;
+        this.chevronPaint.setColor(Theme.multAlpha(this.textColor, f2));
+        canvas.drawPath(this.chevron, this.chevronPaint);
+        canvas.restore();
+        canvas.translate(this.gramAmount.getWidth() + AndroidUtilities.dp(9.0f) + AndroidUtilities.dp(22.0f), 0.0f);
+        this.starIcon.setBounds(0, i, dp, i2);
+        this.starIcon.setAlpha(i3);
+        this.starIcon.draw(canvas);
+        canvas.translate(dp + AndroidUtilities.dp(2.0f), 0.0f);
+        this.starsAmount.draw(canvas, 0.0f, height, this.textColor, f);
+        canvas.translate(this.starsAmount.getWidth() + AndroidUtilities.dpf2(4.8f), height);
+        this.chevronPaint.setColor(Theme.multAlpha(this.textColor, f2));
+        canvas.drawPath(this.chevron, this.chevronPaint);
     }
 }

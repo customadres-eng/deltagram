@@ -51,7 +51,8 @@ public class DeltamentPublicCardSheet extends BottomSheet {
         preview.setCardNumber("GRAM " + card.userId);
         preview.setDiamondOnCard(true);
         DeltamentCardStyle.apply(preview, card.colorId);
-        DeltamentCardStyle.applyNft(preview, card.nftUrl());
+        DeltamentNftSticker nftSticker = new DeltamentNftSticker(context, preview, false);
+        nftSticker.setNft(card.nftUrl(), card.nftX, card.nftY, card.nftScale, card.nftRotation);
         preview.setOnClickListener(v -> {
             org.telegram.ui.Components.QRCodeBottomSheet qr = new org.telegram.ui.Components.QRCodeBottomSheet(
                     context, "Карта " + (card.username.isEmpty() ? card.name : "@" + card.username),
