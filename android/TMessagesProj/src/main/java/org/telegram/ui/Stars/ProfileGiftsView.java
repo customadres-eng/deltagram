@@ -226,8 +226,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             return;
         }
         try {
-            gift.offsetX = Float.parseFloat(value.substring(0, comma));
-            gift.offsetY = Float.parseFloat(value.substring(comma + 1));
+            final float x = Float.parseFloat(value.substring(0, comma));
+            final float y = Float.parseFloat(value.substring(comma + 1));
+            if (!Float.isNaN(x) && !Float.isInfinite(x) && !Float.isNaN(y) && !Float.isInfinite(y)) {
+                // Sanity clamp: a corrupt/infinite offset used to push every
+                // bubble off-screen and made the whole collection disappear.
+                gift.offsetX = Math.max(-2f, Math.min(2f, x));
+                gift.offsetY = Math.max(-2f, Math.min(2f, y));
+            } else {
+                prefs.edit().remove(positionKey(gift.id)).apply();
+            }
         } catch (NumberFormatException ignore) {
         }
     }
@@ -372,6 +380,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
 
         maxCount = MessagesController.getInstance(currentAccount).stargiftsPinnedToTopLimit;
+        if (maxCount <= 0) {
+            // A missing/zero server value used to produce an empty bubble list.
+            maxCount = 6;
+        }
         oldGifts.clear();
         oldGifts.addAll(gifts);
         gifts.clear();
@@ -400,20 +412,17 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                     }
                 }
             }
-            // DeltaGram: on your own profile show every collectible gift as a
-            // draggable bubble, not only the pinned ones. Otherwise a user who
-            // has never pinned a gift sees an empty profile and assumes the
-            // bubbles are missing. Pinned gifts keep their priority (they are
-            // added first above and sorted first by the server).
-            if (canDrag) {
-                for (int i = 0; i < list.gifts.size() && gifts.size() < maxCount; i++) {
-                    final TL_stars.SavedStarGift savedGift = list.gifts.get(i);
-                    if (!savedGift.unsaved && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
-                        final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
-                        if (!giftIds.contains(gift.id)) {
-                            gifts.add(gift);
-                            giftIds.add(gift.id);
-                        }
+            // DeltaGram: every collectible gift becomes a bubble, on any
+            // profile. Only the owner can drag them, but viewers should still
+            // see the collection instead of an empty header. Pinned gifts keep
+            // their priority (they are added first above).
+            for (int i = 0; i < list.gifts.size() && gifts.size() < maxCount; i++) {
+                final TL_stars.SavedStarGift savedGift = list.gifts.get(i);
+                if (!savedGift.unsaved && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
+                    final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
+                    if (!giftIds.contains(gift.id)) {
+                        gifts.add(gift);
+                        giftIds.add(gift.id);
                     }
                 }
             }
@@ -527,7 +536,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float realCX = realX + realW / 2.0f;
         final float realCY = realY + realH / 2.0f;
 
-        float expandScale = expandY / maxExpandY;
+        float expandScale = maxExpandY > 0f ? expandY / maxExpandY : 1f;
+        if (Float.isNaN(expandScale) || Float.isInfinite(expandScale)) {
+            expandScale = 1f;
+        }
         float closedAlpha = Utilities.clamp01((expandY - (AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight())) / dp(50));
 
         for (int i = 0; i < gifts.size(); ++i) {
@@ -594,7 +606,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
             gift.baseCx = gx;
             gift.baseCy = gy;
-            if (gift.offsetX != 0f || gift.offsetY != 0f) {
+            final boolean hasOffset = (gift.offsetX != 0f || gift.offsetY != 0f)
+                    && !Float.isNaN(gift.offsetX) && !Float.isInfinite(gift.offsetX)
+                    && !Float.isNaN(gift.offsetY) && !Float.isInfinite(gift.offsetY);
+            if (hasOffset) {
                 final float offsetAlpha = collapse;
                 gx += gift.offsetX * aw * offsetAlpha;
                 gy += gift.offsetY * ah * offsetAlpha;
@@ -718,9 +733,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
         if (gift != null && apply) {
             if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
-                gift.offsetX = (dragCx - gift.baseCx) / lastAvatarWidth;
-                gift.offsetY = (dragCy - gift.baseCy) / lastAvatarHeight;
-                savePosition(gift);
+                final float nx = (dragCx - gift.baseCx) / lastAvatarWidth;
+                final float ny = (dragCy - gift.baseCy) / lastAvatarHeight;
+                if (!Float.isNaN(nx) && !Float.isInfinite(nx) && !Float.isNaN(ny) && !Float.isInfinite(ny)) {
+                    gift.offsetX = Math.max(-2f, Math.min(2f, nx));
+                    gift.offsetY = Math.max(-2f, Math.min(2f, ny));
+                    savePosition(gift);
+                }
             }
         }
         invalidate();
