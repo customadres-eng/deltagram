@@ -269,6 +269,7 @@ import org.telegram.ui.Components.ProfileGalleryView;
 import org.telegram.ui.Components.ProfileGooeyView;
 import org.telegram.ui.Components.ProfileMusicView;
 import org.telegram.ui.Wallet.DeltamentMusicPlayerFragment;
+import org.telegram.ui.Wallet.DeltamentMusicSheet;
 import org.telegram.ui.Components.ProfileBalanceView;
 import org.telegram.ui.Wallet.GramWallet;
 import org.telegram.ui.Wallet.ProfileWalletCardDialog;
@@ -613,6 +614,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private final static int enable_no_forwards = 46;
     private final static int disable_no_forwards = 47;
     private final static int send_money = 48;
+    private final static int music_item = 49;
 
     private Rect rect = new Rect();
 
@@ -2869,6 +2871,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     }
                 } else if (id == edit_info) {
                     presentFragment(new UserInfoActivity());
+                } else if (id == music_item) {
+                    new DeltamentMusicSheet(getParentActivity()).show();
                 } else if (id == edit_color) {
 //                    if (!getUserConfig().isPremium()) {
 //                        showDialog(new PremiumFeatureBottomSheet(ProfileActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_NAME_COLOR, true));
@@ -3917,18 +3921,20 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else {
                 musicView.setVisibility(View.GONE);
             }
-            // DeltaGram: open the custom full-screen player with the profile's
-            // saved track, never the default Telegram audio sheet.
-            musicView.setOnClickListener(v -> {
+            // DeltaGram: the music pill opens the SoundCloud/chat music sheet.
+            // Long press still opens the full-screen player for the saved track.
+            musicView.setOnClickListener(v -> new DeltamentMusicSheet(getParentActivity()).show());
+            musicView.setOnLongClickListener(v -> {
                 if (userInfo != null && userInfo.saved_music != null) {
                     MessagesController.SavedMusicList list = new MessagesController.SavedMusicList(currentAccount, getDialogId());
                     list.setup(userInfo.saved_music);
                     if (!list.list.isEmpty()) {
                         presentFragment(new DeltamentMusicPlayerFragment(list.list.get(0)));
-                        return;
+                        return true;
                     }
                 }
                 presentFragment(new DeltamentMusicPlayerFragment());
+                return true;
             });
 
             actionsView = new ProfileActionsView(context, dp(74));
@@ -12256,6 +12262,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 }
                 editColorItem = otherItem.addSubItem(edit_color, R.drawable.menu_profile_colors, LocaleController.getString(R.string.ProfileColorEdit));
                 updateEditColorIcon();
+                otherItem.addSubItem(music_item, R.drawable.files_music, "Музыка");
                 if (myProfile) {
                     setUsernameItem = otherItem.addSubItem(set_username, R.drawable.menu_username_change, getString(R.string.ProfileUsernameEdit));
                     linkItem = otherItem.addSubItem(copy_link_profile, R.drawable.msg_link2, getString(R.string.ProfileCopyLink));
