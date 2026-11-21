@@ -627,7 +627,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private final static int statistics = 19;
     private final static int start_secret_chat = 20;
     private final static int gallery_menu_save = 21;
-    private final static int gallery_menu_set_banner = 45;
+    // Must not collide with delete_group (45): the action bar click handler
+    // checks delete_group first, so a shared id swallowed the banner tap.
+    private final static int gallery_menu_set_banner = 50;
     private final static int view_discussion = 22;
     private final static int delete_topic = 23;
     private final static int report = 24;
