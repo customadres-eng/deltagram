@@ -283,7 +283,7 @@ public class DeltamentSoundCloudClient {
         runAsync(() -> {
             try {
                 final String clientId = requireClientId();
-                final String url = "https://api-v2.soundcloud.com/charts?kind=top&genre=soundcloud:genres:all-music"
+                final String url = "https://api-v2.soundcloud.com/charts?kind=trending&genre=soundcloud:genres:all-music"
                         + "&limit=40&app_locale=en&client_id=" + URLEncoder.encode(clientId, "UTF-8");
                 final String body = request(url, "application/json", true);
                 final JSONObject root = new JSONObject(body);
