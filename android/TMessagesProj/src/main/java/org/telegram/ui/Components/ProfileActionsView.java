@@ -9,6 +9,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -124,6 +125,14 @@ public class ProfileActionsView extends View {
     private RadialGradient radialGradient;
     private final Matrix matrix = new Matrix();
 
+    // Profile v2: subtle "liquid glass" sheen for the capsule action buttons.
+    private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint glassBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Matrix glassMatrix = new Matrix();
+    private final RectF glassRect = new RectF();
+    private LinearGradient glassGradient;
+    private float glassGradientW, glassGradientH;
+
     public boolean myProfile;
 
     public ProfileActionsView(Context context, int targetHeight) {
@@ -131,6 +140,9 @@ public class ProfileActionsView extends View {
 
         paint.setColor(Color.BLACK);
         paint.setAlpha(40);
+
+        glassBorderPaint.setStyle(Paint.Style.STROKE);
+        glassBorderPaint.setStrokeWidth(dpf2(1f));
 
         xpadding = dpf2(14);
         ypadding = dpf2(12);
@@ -324,6 +336,9 @@ public class ProfileActionsView extends View {
                         canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, shaderPaint);
                         shaderPaint.setAlpha(wasAlpha2);
                     }
+                    if (ProfileActivity.isProfileV2Enabled()) {
+                        drawGlass(canvas, AndroidUtilities.rectTmp, r, action.getAlpha() * alphaFraction1);
+                    }
                     paint.setAlpha(wasAlpha);
                 }
             }
@@ -337,6 +352,42 @@ public class ProfileActionsView extends View {
                 drawAction(canvas, actions.get(i), fraction, alphaFraction2);
             }
         }
+    }
+
+    private void drawGlass(Canvas canvas, RectF rect, float radius, float alpha) {
+        if (alpha <= 0.01f || rect.width() <= 0 || rect.height() <= 0) {
+            return;
+        }
+        if (glassGradient == null
+                || Math.abs(glassGradientW - rect.width()) > 0.5f
+                || Math.abs(glassGradientH - rect.height()) > 0.5f) {
+            glassGradientW = rect.width();
+            glassGradientH = rect.height();
+            glassGradient = new LinearGradient(
+                    0, 0, 0, glassGradientH,
+                    new int[]{0x3DFFFFFF, 0x14FFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.52f, 1f},
+                    Shader.TileMode.CLAMP
+            );
+        }
+        final float a = Utilities.clamp01(alpha);
+        glassPaint.setShader(glassGradient);
+        glassPaint.setAlpha((int) (255 * a));
+        glassMatrix.setTranslate(rect.left, rect.top);
+        glassGradient.setLocalMatrix(glassMatrix);
+        canvas.drawRoundRect(rect, radius, radius, glassPaint);
+        glassPaint.setShader(null);
+
+        final boolean light = isButtonColorLight();
+        final int borderAlpha = (int) (255 * a * (light ? 0.14f : 0.28f));
+        if (borderAlpha <= 0) {
+            return;
+        }
+        glassBorderPaint.setColor((borderAlpha << 24) | (light ? 0x000000 : 0xFFFFFF));
+        glassRect.set(rect);
+        final float inset = glassBorderPaint.getStrokeWidth() / 2f;
+        glassRect.inset(inset, inset);
+        canvas.drawRoundRect(glassRect, Math.max(0f, radius - inset), Math.max(0f, radius - inset), glassBorderPaint);
     }
 
     private void drawRenderNode(Canvas canvas) {
