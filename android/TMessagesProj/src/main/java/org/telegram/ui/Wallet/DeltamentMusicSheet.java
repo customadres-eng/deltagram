@@ -144,6 +144,10 @@ public class DeltamentMusicSheet extends BottomSheet {
         setApplyBottomPadding(true);
         setCanDismissWithSwipe(true);
         setDimBehindAlpha(75);
+        // The sheet has a search field, so the window must accept IME focus.
+        // Without this the keyboard never opens because BottomSheet was created
+        // with needFocus=false and sets FLAG_ALT_FOCUSABLE_IM.
+        setFocusable(true);
 
         final int screenHeight = AndroidUtilities.displaySize.y;
         final int sheetHeight = Math.max(dp(340), Math.min(dp(700), screenHeight - dp(90)));
@@ -238,6 +242,21 @@ public class DeltamentMusicSheet extends BottomSheet {
         searchField.setBackground(rounded(COLOR_FIELD, dp(24)));
         searchField.setPadding(dp(20), 0, dp(20), 0);
         searchField.setGravity(Gravity.CENTER_VERTICAL);
+        searchField.setFocusableInTouchMode(true);
+        searchField.setCursorVisible(true);
+        searchField.setOnClickListener(v -> {
+            searchField.requestFocus();
+            AndroidUtilities.showKeyboard(searchField);
+        });
+        searchField.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
+                    || event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER) {
+                searchField.clearFocus();
+                AndroidUtilities.hideKeyboard(searchField);
+                return true;
+            }
+            return false;
+        });
         searchField.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
