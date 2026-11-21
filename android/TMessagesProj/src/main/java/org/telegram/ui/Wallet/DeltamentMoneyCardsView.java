@@ -73,15 +73,16 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         setClipToPadding(false);
         setPadding(0, dp(4), 0, dp(8));
 
-        tonCard = new WalletCardComponent(context);
+        tonCard = new WalletCardComponent(context, true);
         tonCard.setCardHolder("DELTA");
         tonCard.setCardNumber("GRAM 1780 " + UserConfig.getInstance(account).getClientUserId());
         tonCard.setDiamondOnCard(true);
-        tonCard.setUseGyroscope(1f);
+        tonCard.setUseGyroscope(0f);
+        DeltamentCardStyle.apply(tonCard, 2);
         tonCard.setOnClickListener(v -> showCardQr(false));
         tonNft = new DeltamentNftSticker(context, tonCard, false);
 
-        starsCard = new WalletCardComponent(context);
+        starsCard = new WalletCardComponent(context, true);
         starsCard.setCardHolder("DELTA");
         starsCard.setCardNumber("STAR 1780 " + UserConfig.getInstance(account).getClientUserId());
         starsCard.setDiamondOnCard(false);
@@ -115,6 +116,8 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
             dot.setBackground(bg);
             LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(i == 0 ? 18 : 6), dp(6));
             dlp.setMargins(dp(3), 0, dp(3), 0);
+            final int page = i;
+            dot.setOnClickListener(v -> pager.setPage(page, true));
             dots.addView(dot, dlp);
             dotViews[i] = dot;
         }
