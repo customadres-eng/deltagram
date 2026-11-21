@@ -11,12 +11,7 @@
       "limited": true,
       "availability_total": 300,
       "limited_per_user": true,
-      "per_user_total": 30,
-      "purchase_window": {
-        "start": "19:40",
-        "duration_minutes": 30,
-        "timezone": "Europe/Kyiv"
-      }
+      "per_user_total": 30
     }
   ]
 }
