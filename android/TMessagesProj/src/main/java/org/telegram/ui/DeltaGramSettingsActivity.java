@@ -41,10 +41,8 @@ import org.telegram.ui.Wallet.DeltamentDomainsActivity;
 /**
  * DeltaGram settings.
  *
- * This is the DeltaGram edition of the exteraStatic preferences block:
- * a single entry point with General / Appearance / Chats / Badges / Other
- * pages. Every row below is wired to a real DeltaGram or Telegram setting;
- * no dead toggles.
+ * DeltaGram preferences: General / Appearance / Chats / Badges / Other.
+ * Every row is wired to a real DeltaGram or Telegram setting.
  */
 public class DeltaGramSettingsActivity extends BaseFragment {
 
@@ -183,7 +181,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         texts.addView(title, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
 
         TextView subtitle = new TextView(context);
-        subtitle.setText("DeltaGram edition · exteraStatic-совместимые настройки");
+        subtitle.setText("DeltaGram edition");
         subtitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         texts.addView(subtitle, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 2, 0, 0));

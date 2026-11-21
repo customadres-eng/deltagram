@@ -320,7 +320,7 @@ public class SharedConfig {
     public static boolean fontSizeIsDefault;
     public static int bubbleRadius = 17;
     public static String cardCurrency = "RUB";
-    // ExteraDelta personalization.
+    // DeltaGram personalization.
     public static boolean keepDeletedMessages;
     public static boolean hidePhoneNumber;
     public static boolean showIdAndDc;
