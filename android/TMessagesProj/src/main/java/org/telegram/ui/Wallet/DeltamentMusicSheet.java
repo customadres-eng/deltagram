@@ -140,7 +140,7 @@ public class DeltamentMusicSheet extends BottomSheet {
         setDimBehindAlpha(75);
 
         final int screenHeight = AndroidUtilities.displaySize.y;
-        final int sheetHeight = Math.max(dp(340), Math.min(dp(560), screenHeight - dp(110)));
+        final int sheetHeight = Math.max(dp(340), Math.min(dp(700), screenHeight - dp(90)));
 
         root = new FixedHeightLinearLayout(context, sheetHeight);
         root.setOrientation(LinearLayout.VERTICAL);
