@@ -3900,16 +3900,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         sharedMediaLayout.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.MATCH_PARENT));
         sharedMediaLayout.initBlurCapture((ViewGroup) fragmentView);
 //        sharedMediaLayout.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        // Both balances are public on the card, so every profile needs the pill,
+        // not only the own one where the music view is created.
+        balanceView = new ProfileBalanceView(context, resourcesProvider);
+        balanceView.setOnClickListener(v -> {
+            int tappedKind = balanceView.tappedKind();
+            if (tappedKind < 0) {
+                return;
+            }
+            openCardsSheet(tappedKind);
+        });
         if (userId == 0 || imageUpdater == null || myProfile) {
             musicView = new ProfileMusicView(context, resourcesProvider);
-            balanceView = new ProfileBalanceView(context, resourcesProvider);
-            balanceView.setOnClickListener(v -> {
-                int tappedKind = balanceView.tappedKind();
-                if (tappedKind < 0) {
-                    return;
-                }
-                openCardsSheet(tappedKind);
-            });
             if (avatarsBlurView != null) {
                 avatarsBlurView.setMusicView(musicView);
             }
@@ -5561,8 +5563,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (musicView != null) {
             avatarsBlurView.setMusicView(musicView);
             avatarContainer2.addView(musicView, LayoutHelper.createFrame(-1, -1));
+        }
+        if (balanceView != null) {
             avatarContainer2.setClipChildren(false);
-            avatarContainer2.addView(balanceView, LayoutHelper.createFrame(-1, -1));
+            avatarContainer2.addView(balanceView, LayoutHelper.createFrame(-1, AndroidUtilities.dp(37), Gravity.TOP | Gravity.CENTER_HORIZONTAL));
         }
         avatarImage.setAvatarsViewPager(avatarsViewPager);
 
@@ -11192,11 +11196,19 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 musicView.setMusicDocument(userInfo.saved_music);
             }
             musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
-            if (balanceView != null) {
-                balanceView.setTranslationY(hasMusic ? AndroidUtilities.dp(37) : 0);
-            }
-            updateCardsBalance();
             musicView.invalidate();
+        }
+        if (balanceView != null) {
+            android.view.ViewGroup.LayoutParams lp = balanceView.getLayoutParams();
+            if (lp instanceof android.widget.FrameLayout.LayoutParams) {
+                int top = hasMusic ? AndroidUtilities.dp(37) : 0;
+                if (((android.widget.FrameLayout.LayoutParams) lp).topMargin != top) {
+                    ((android.widget.FrameLayout.LayoutParams) lp).topMargin = top;
+                    balanceView.setLayoutParams(lp);
+                }
+            }
+            balanceView.setTranslationY(0);
+            updateCardsBalance();
             balanceView.invalidate();
         }
     }

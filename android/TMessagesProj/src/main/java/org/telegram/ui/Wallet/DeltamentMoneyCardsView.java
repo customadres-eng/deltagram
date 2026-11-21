@@ -73,16 +73,15 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         setClipToPadding(false);
         setPadding(0, dp(4), 0, dp(8));
 
-        tonCard = new WalletCardComponent(context, true);
+        tonCard = new WalletCardComponent(context);
         tonCard.setCardHolder("DELTA");
         tonCard.setCardNumber("GRAM 1780 " + UserConfig.getInstance(account).getClientUserId());
         tonCard.setDiamondOnCard(true);
-        tonCard.setUseGyroscope(0f);
-        DeltamentCardStyle.apply(tonCard, 2);
+        tonCard.setUseGyroscope(1f);
         tonCard.setOnClickListener(v -> showCardQr(false));
         tonNft = new DeltamentNftSticker(context, tonCard, false);
 
-        starsCard = new WalletCardComponent(context, true);
+        starsCard = new WalletCardComponent(context);
         starsCard.setCardHolder("DELTA");
         starsCard.setCardNumber("STAR 1780 " + UserConfig.getInstance(account).getClientUserId());
         starsCard.setDiamondOnCard(false);
