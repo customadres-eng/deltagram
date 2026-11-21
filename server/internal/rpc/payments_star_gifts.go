@@ -452,6 +452,9 @@ func (r *Router) onPaymentsGetPaymentForm(ctx context.Context, req *tg.PaymentsG
 	if err != nil {
 		return nil, err
 	}
+	if !gift.PurchaseWindowOpen(r.clock.Now()) {
+		return nil, tgerr.New(400, "STARGIFT_USAGE_LIMITED")
+	}
 	if gift.RequirePremium && !r.viewerPremium(ctx, userID) {
 		return nil, tgerr400("PREMIUM_ACCOUNT_REQUIRED")
 	}
@@ -649,6 +652,9 @@ func (r *Router) onPaymentsSendStarsForm(ctx context.Context, req *tg.PaymentsSe
 	gift, err := r.starGiftFromCatalog(ctx, inv.GiftID)
 	if err != nil {
 		return nil, err
+	}
+	if !gift.PurchaseWindowOpen(r.clock.Now()) {
+		return nil, tgerr.New(400, "STARGIFT_USAGE_LIMITED")
 	}
 	buyerPremium := r.viewerPremium(ctx, userID)
 	if gift.RequirePremium && !buyerPremium {

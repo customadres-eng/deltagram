@@ -84,6 +84,7 @@ func Import(ctx context.Context, svc Service, manifest Manifest, assets AssetRes
 		if err != nil {
 			return ImportResult{}, fmt.Errorf("gift %q: %w", spec.Title, err)
 		}
+		applyPurchaseWindow(&bundle.Catalog, spec.PurchaseWindow, at)
 		if bundle.Catalog.Animation.Width != 512 || bundle.Catalog.Animation.Height != 512 ||
 			len(bundle.Catalog.Animation.TGS) == 0 || len(bundle.Catalog.Animation.SHA256) != 32 {
 			return ImportResult{}, fmt.Errorf("gift %q: invalid base animation", spec.Title)
@@ -138,6 +139,40 @@ func Import(ctx context.Context, svc Service, manifest Manifest, assets AssetRes
 		result.Gifts[i].Status, result.Gifts[i].GiftID = "created", strconv.FormatInt(created.Catalog.Gift.ID, 10)
 	}
 	return result, nil
+}
+
+// applyPurchaseWindow copies a pack's recurring daily window into the catalog
+// write and seeds LockedUntilDate with the next opening so clients that only
+// understand the one-shot lock still show a useful release time.
+func applyPurchaseWindow(write *domain.StarGiftCatalogWrite, window *PurchaseWindowSpec, now int) {
+	if window == nil {
+		return
+	}
+	startMinute, err := window.StartMinute()
+	if err != nil {
+		return
+	}
+	location, err := time.LoadLocation(window.NormalizedTimezone())
+	if err != nil {
+		return
+	}
+	write.PurchaseWindowEnabled = true
+	write.PurchaseWindowStartMinute = startMinute
+	write.PurchaseWindowDurationMinutes = window.DurationMinutes
+	write.PurchaseWindowTimezone = window.NormalizedTimezone()
+
+	nowTime := time.Unix(int64(now), 0).In(location)
+	minute := nowTime.Hour()*60 + nowTime.Minute()
+	offset := (minute - startMinute + 1440) % 1440
+	if offset < window.DurationMinutes {
+		return
+	}
+	startHour, startOfHourMinute := startMinute/60, startMinute%60
+	next := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), startHour, startOfHourMinute, 0, 0, location)
+	if !next.After(nowTime) {
+		next = time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day()+1, startHour, startOfHourMinute, 0, 0, location)
+	}
+	write.LockedUntilDate = int(next.Unix())
 }
 
 func buildBundle(prep Preparer, spec GiftSpec, assets AssetResolver) (domain.StarGiftCatalogBundleWrite, error) {

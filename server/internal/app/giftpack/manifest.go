@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+	"time"
 
 	"telesrv/internal/domain"
 )
@@ -44,6 +46,44 @@ type GiftSpec struct {
 	AuctionStartDate     int          `json:"auction_start_date,omitempty"`
 	AuctionRoundDuration int          `json:"auction_round_duration,omitempty"`
 	Upgrade              *UpgradeSpec `json:"upgrade,omitempty"`
+	// PurchaseWindow restricts buying to a recurring daily local-time window,
+	// for example a drop that may only be bought at 19:40 Europe/Kyiv.
+	PurchaseWindow *PurchaseWindowSpec `json:"purchase_window,omitempty"`
+}
+
+// PurchaseWindowSpec is a recurring daily sale window expressed in an IANA
+// timezone. Start is "HH:MM" in that timezone; DurationMinutes is how long the
+// window stays open (1..1440). Timezone defaults to Europe/Kyiv.
+type PurchaseWindowSpec struct {
+	Start           string `json:"start"`
+	DurationMinutes int    `json:"duration_minutes"`
+	Timezone        string `json:"timezone,omitempty"`
+}
+
+// StartMinute parses Start as minutes after local midnight.
+func (w PurchaseWindowSpec) StartMinute() (int, error) {
+	parts := strings.Split(strings.TrimSpace(w.Start), ":")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("purchase_window.start must be HH:MM")
+	}
+	hour, err := strconv.Atoi(parts[0])
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, fmt.Errorf("purchase_window.start hour is invalid")
+	}
+	minute, err := strconv.Atoi(parts[1])
+	if err != nil || minute < 0 || minute > 59 {
+		return 0, fmt.Errorf("purchase_window.start minute is invalid")
+	}
+	return hour*60 + minute, nil
+}
+
+// NormalizedTimezone returns the configured IANA name with the DeltaGram
+// default when the manifest leaves it out.
+func (w PurchaseWindowSpec) NormalizedTimezone() string {
+	if timezone := strings.TrimSpace(w.Timezone); timezone != "" {
+		return timezone
+	}
+	return "Europe/Kyiv"
 }
 
 // UpgradeSpec describes the optional collectible attribute pool (model /
@@ -129,6 +169,20 @@ func ParseManifest(data []byte) (Manifest, error) {
 			(g.Limited && g.AvailabilityTotal == 0) ||
 			(g.LimitedPerUser && g.PerUserTotal == 0) || (!g.LimitedPerUser && g.PerUserTotal > 0) {
 			return Manifest{}, fmt.Errorf("pack manifest: gift %q: invalid supply or per-user limit", g.Title)
+		}
+		if g.PurchaseWindow != nil {
+			if g.Auction {
+				return Manifest{}, fmt.Errorf("pack manifest: gift %q: auctions do not use a purchase_window", g.Title)
+			}
+			if _, err := g.PurchaseWindow.StartMinute(); err != nil {
+				return Manifest{}, fmt.Errorf("pack manifest: gift %q: %w", g.Title, err)
+			}
+			if g.PurchaseWindow.DurationMinutes < 1 || g.PurchaseWindow.DurationMinutes > 1440 {
+				return Manifest{}, fmt.Errorf("pack manifest: gift %q: purchase_window.duration_minutes must be 1..1440", g.Title)
+			}
+			if _, err := time.LoadLocation(g.PurchaseWindow.NormalizedTimezone()); err != nil {
+				return Manifest{}, fmt.Errorf("pack manifest: gift %q: purchase_window.timezone is invalid", g.Title)
+			}
 		}
 		if g.Upgrade == nil {
 			continue

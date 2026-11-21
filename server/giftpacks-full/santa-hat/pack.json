@@ -1,0 +1,22 @@
+{
+  "pack_name": "Santa Hat",
+  "author": "DeltaGram",
+  "gifts": [
+    {
+      "id_slug": "santa-hat-5983471780763796287",
+      "title": "Santa Hat",
+      "stars": 50,
+      "convert_stars": 25,
+      "base_animation": "base.tgs",
+      "limited": true,
+      "availability_total": 300,
+      "limited_per_user": true,
+      "per_user_total": 30,
+      "purchase_window": {
+        "start": "19:40",
+        "duration_minutes": 30,
+        "timezone": "Europe/Kyiv"
+      }
+    }
+  ]
+}
