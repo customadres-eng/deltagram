@@ -58,6 +58,22 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private static final String PREFS_NAME = "profile_gifts_positions";
     private final boolean canDrag;
 
+    private static final java.util.ArrayList<java.lang.ref.WeakReference<ProfileGiftsView>> INSTANCES = new java.util.ArrayList<>();
+    private final Paint skinRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint skinGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /** Repaints every visible profile after the user picks another bubble skin. */
+    public static void notifySkinChanged() {
+        for (int i = INSTANCES.size() - 1; i >= 0; i--) {
+            final ProfileGiftsView view = INSTANCES.get(i).get();
+            if (view == null) {
+                INSTANCES.remove(i);
+            } else {
+                view.invalidate();
+            }
+        }
+    }
+
     private Gift draggingGift;
     private float dragCx, dragCy;
     private float dragTouchOffsetX, dragTouchOffsetY;
@@ -85,6 +101,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         this.resourcesProvider = resourcesProvider;
 
         this.canDrag = dialogId == UserConfig.getInstance(currentAccount).getClientUserId();
+        INSTANCES.add(new java.lang.ref.WeakReference<>(this));
     }
 
     public float expandProgress, collapseProgress;
@@ -308,10 +325,25 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             final float scale = ascale * bounce.getScale(0.1f);
             canvas.scale(scale, scale);
             particles.process();
-            particles.draw(canvas, color, alpha);
+            final int skin = DeltamentBubbleSkins.get();
+            particles.draw(canvas, DeltamentBubbleSkins.isDefault(skin) ? color : DeltamentBubbleSkins.accent(skin), alpha);
             if (gradientPaint != null) {
                 gradientPaint.setAlpha((int) (0xFF * alpha * gradientAlpha));
                 canvas.drawRect(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f, gradientPaint);
+            }
+            if (!DeltamentBubbleSkins.isDefault(skin)) {
+                final int accent = DeltamentBubbleSkins.accent(skin);
+                final float radius = gsz / 2.0f - dp(0.8f);
+                skinGlowPaint.setStyle(Paint.Style.STROKE);
+                skinGlowPaint.setStrokeWidth(dp(4.5f));
+                skinGlowPaint.setColor(accent);
+                skinGlowPaint.setAlpha((int) (70 * alpha));
+                canvas.drawCircle(0, 0, radius, skinGlowPaint);
+                skinRingPaint.setStyle(Paint.Style.STROKE);
+                skinRingPaint.setStrokeWidth(dp(DeltamentBubbleSkins.ringWidth(skin)));
+                skinRingPaint.setColor(accent);
+                skinRingPaint.setAlpha((int) (230 * alpha));
+                canvas.drawCircle(0, 0, radius, skinRingPaint);
             }
             if (emojiDrawable != null) {
                 final int sz = dp(24);

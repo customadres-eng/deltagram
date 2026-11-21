@@ -61,6 +61,10 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.net.Uri;
@@ -524,6 +528,38 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private boolean searchMode;
 
     private FlagSecureReason flagSecure;
+
+    // DeltaGram: subtle gyroscope parallax for the avatar and gift bubbles.
+    private SensorManager parallaxSensorManager;
+    private Sensor parallaxGyro;
+    private boolean parallaxRegistered;
+    private float parallaxX, parallaxY;
+    private long parallaxLastTimestamp;
+    private final SensorEventListener parallaxListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (avatarContainer2 == null) {
+                return;
+            }
+            final long now = event.timestamp;
+            final float dt = parallaxLastTimestamp == 0 ? 0.016f
+                    : Math.min(0.06f, (now - parallaxLastTimestamp) / 1_000_000_000f);
+            parallaxLastTimestamp = now;
+            final float maxX = dp(7f);
+            final float maxY = dp(5f);
+            final float targetX = Math.max(-maxX, Math.min(maxX, -event.values[1] * dp(13f)));
+            final float targetY = Math.max(-maxY, Math.min(maxY, event.values[0] * dp(10f)));
+            final float k = 1f - (float) Math.exp(-dt / 0.08f);
+            parallaxX += (targetX - parallaxX) * k;
+            parallaxY += (targetY - parallaxY) * k;
+            avatarContainer2.setTranslationX(parallaxX);
+            avatarContainer2.setTranslationY(parallaxY);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
 
     private HashMap<Integer, Integer> positionToOffset = new HashMap<>();
 
@@ -2412,6 +2448,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        stopAvatarParallax();
         if (sharedMediaLayout != null) {
             sharedMediaLayout.onDestroy();
         }
@@ -9682,6 +9719,54 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, resourcesProvider));
     }
 
+    private void startAvatarParallax() {
+        if (parallaxRegistered || avatarContainer2 == null) {
+            return;
+        }
+        if (!MessagesController.getGlobalMainSettings().getBoolean("dg_avatar_parallax", true)) {
+            return;
+        }
+        try {
+            if (parallaxSensorManager == null) {
+                parallaxSensorManager = (SensorManager) ApplicationLoader.applicationContext.getSystemService(Context.SENSOR_SERVICE);
+            }
+            if (parallaxSensorManager == null) {
+                return;
+            }
+            if (parallaxGyro == null) {
+                parallaxGyro = parallaxSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            }
+            if (parallaxGyro == null) {
+                return;
+            }
+            parallaxLastTimestamp = 0;
+            parallaxSensorManager.registerListener(parallaxListener, parallaxGyro, SensorManager.SENSOR_DELAY_GAME);
+            parallaxRegistered = true;
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private void stopAvatarParallax() {
+        if (!parallaxRegistered) {
+            return;
+        }
+        try {
+            if (parallaxSensorManager != null) {
+                parallaxSensorManager.unregisterListener(parallaxListener);
+            }
+        } catch (Throwable ignore) {
+        }
+        parallaxRegistered = false;
+        parallaxLastTimestamp = 0;
+        parallaxX = 0f;
+        parallaxY = 0f;
+        if (avatarContainer2 != null) {
+            avatarContainer2.setTranslationX(0f);
+            avatarContainer2.setTranslationY(0f);
+        }
+    }
+
     public void onResume() {
         super.onResume();
         org.telegram.messenger.DeltagramCards.addListener(cardsRegistryListener);
@@ -9730,11 +9815,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         updateItemsUsername();
         needLayout(false);
+        startAvatarParallax();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        stopAvatarParallax();
         org.telegram.messenger.DeltagramCards.removeListener(cardsRegistryListener);
         if (undoView != null) {
             undoView.hide(true, 0);

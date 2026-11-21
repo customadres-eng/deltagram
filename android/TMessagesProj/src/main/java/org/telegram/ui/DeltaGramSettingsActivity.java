@@ -35,6 +35,8 @@ import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
+import org.telegram.ui.Stars.DeltamentBubbleSkins;
+import org.telegram.ui.Stars.ProfileGiftsView;
 import org.telegram.ui.Wallet.DeltamentCardSettingsActivity;
 import org.telegram.ui.Wallet.DeltamentDomainsActivity;
 import org.telegram.ui.Wallet.DeltamentMusicSheet;
@@ -61,6 +63,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     private final int currentAccount = UserConfig.selectedAccount;
     private int page;
     private TextView lastValueView;
+    private TextView bubbleSkinValueView;
 
     public DeltaGramSettingsActivity() {
         this(PAGE_MAIN);
@@ -282,6 +285,17 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 "Настройки интерфейса Telegram",
                 null, R.drawable.msg_customize, v ->
                         presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_OTHER)));
+
+        content.addView(section("Профиль"));
+        addSwitch(content, "Параллакс аватара",
+                "Аватар и пузыри подарков слегка «плавают» при наклоне телефона",
+                prefs().getBoolean("dg_avatar_parallax", true), (view, checked) ->
+                        prefs().edit().putBoolean("dg_avatar_parallax", checked).apply());
+        addAction(content, "Скины пузырей подарков",
+                "Цвет кольца, свечения и частиц у коллекционных подарков",
+                DeltamentBubbleSkins.name(DeltamentBubbleSkins.get()), R.drawable.msg_customize,
+                v -> showBubbleSkinDialog());
+        bubbleSkinValueView = lastValueView;
     }
 
     private void buildChats(LinearLayout content) {
@@ -406,6 +420,22 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 lastValueView.setText(LocaleController.getString(icons[which].title));
             }
             BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Иконка DeltaGram изменена").show();
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void showBubbleSkinDialog() {
+        final String[] names = DeltamentBubbleSkins.names();
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Скин пузырей");
+        builder.setItems(names, (dialog, which) -> {
+            DeltamentBubbleSkins.set(which);
+            ProfileGiftsView.notifySkinChanged();
+            if (bubbleSkinValueView != null) {
+                bubbleSkinValueView.setText(DeltamentBubbleSkins.name(which));
+            }
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Скин пузырей: " + DeltamentBubbleSkins.name(which)).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         builder.show();
