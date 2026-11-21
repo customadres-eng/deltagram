@@ -37,6 +37,7 @@ import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
 import org.telegram.ui.Wallet.DeltamentCardSettingsActivity;
 import org.telegram.ui.Wallet.DeltamentDomainsActivity;
+import org.telegram.ui.Wallet.DeltamentMusicSheet;
 
 /**
  * DeltaGram settings.
@@ -212,6 +213,8 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 presentFragment(new DeltamentDomainsActivity())));
         content.addView(action("Карты и баланс", "Цвет, NFT и TON-адрес публичной карты", R.drawable.wallet_gram_small, v ->
                 presentFragment(new DeltamentCardSettingsActivity())));
+        content.addView(action("Музыка", "Чарты SoundCloud и плеер DeltaGram", R.drawable.files_music, v ->
+                new DeltamentMusicSheet(getParentActivity()).show()));
 
         content.addView(section("О клиенте"));
         content.addView(category("Другое", "Обновления, ссылки, сброс настроек", R.drawable.msg_fave, PAGE_OTHER));
