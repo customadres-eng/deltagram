@@ -31,6 +31,7 @@ import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
@@ -271,6 +272,9 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 "Акценты, обои, ночной режим",
                 null, R.drawable.msg_theme, v ->
                         presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_BASIC)));
+        addAction(content, "Иконка приложения",
+                "Выбрать иконку DeltaGram на рабочем столе",
+                appIconLabel(), R.drawable.msg_customize, v -> showAppIconDialog());
         addAction(content, "Иконки и панели",
                 "Настройки интерфейса Telegram",
                 null, R.drawable.msg_customize, v ->
@@ -374,6 +378,34 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         NotificationCenter.getInstance(currentAccount).postNotificationName(
                 NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
         finishFragment();
+    }
+
+    private String appIconLabel() {
+        for (LauncherIconController.LauncherIcon icon : LauncherIconController.LauncherIcon.values()) {
+            if (LauncherIconController.isEnabled(icon)) {
+                return LocaleController.getString(icon.title);
+            }
+        }
+        return LocaleController.getString(LauncherIconController.LauncherIcon.DEFAULT.title);
+    }
+
+    private void showAppIconDialog() {
+        LauncherIconController.LauncherIcon[] icons = LauncherIconController.LauncherIcon.values();
+        CharSequence[] labels = new CharSequence[icons.length];
+        for (int i = 0; i < icons.length; i++) {
+            labels[i] = LocaleController.getString(icons[i].title);
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Иконка приложения");
+        builder.setItems(labels, (dialog, which) -> {
+            LauncherIconController.setIcon(icons[which]);
+            if (lastValueView != null) {
+                lastValueView.setText(LocaleController.getString(icons[which].title));
+            }
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Иконка DeltaGram изменена").show();
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
     }
 
     private void showSwipeActionDialog() {
