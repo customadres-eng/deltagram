@@ -99,6 +99,28 @@ func (g StarGift) PurchaseWindowOpen(now time.Time) bool {
 	return offset < g.PurchaseWindowDurationMinutes
 }
 
+// NextPurchaseWindowStart returns the next opening of the recurring window at
+// or after now. It is used for the client projection so a gift that is closed
+// right now still shows the upcoming 19:40 release instead of looking broken.
+func (g StarGift) NextPurchaseWindowStart(now time.Time) (time.Time, bool) {
+	if !g.PurchaseWindowEnabled || g.PurchaseWindowStartMinute < 0 || g.PurchaseWindowStartMinute > 1439 {
+		return time.Time{}, false
+	}
+	location, err := time.LoadLocation(g.PurchaseWindowTimezone)
+	if err != nil {
+		return time.Time{}, false
+	}
+	local := now.In(location)
+	hour, minute := g.PurchaseWindowStartMinute/60, g.PurchaseWindowStartMinute%60
+	for day := 0; day < 2; day++ {
+		candidate := time.Date(local.Year(), local.Month(), local.Day()+day, hour, minute, 0, 0, location)
+		if !candidate.Before(now) {
+			return candidate, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // SavedStarGift 是一条已收到的礼物实例（peer_star_gifts 一行）。
 type SavedStarGift struct {
 	ID                       int64

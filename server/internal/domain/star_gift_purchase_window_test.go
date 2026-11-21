@@ -61,3 +61,27 @@ func TestStarGiftPurchaseWindowWrapsMidnight(t *testing.T) {
 		t.Fatal("a window that crosses midnight must close after its duration")
 	}
 }
+
+func TestNextPurchaseWindowStart(t *testing.T) {
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gift := StarGift{
+		PurchaseWindowEnabled:         true,
+		PurchaseWindowStartMinute:     19*60 + 40,
+		PurchaseWindowDurationMinutes: 30,
+		PurchaseWindowTimezone:        "Europe/Kyiv",
+	}
+	next, ok := gift.NextPurchaseWindowStart(time.Date(2026, 11, 21, 10, 0, 0, 0, kyiv))
+	if !ok || !next.Equal(time.Date(2026, 11, 21, 19, 40, 0, 0, kyiv)) {
+		t.Fatalf("before opening: next=%v ok=%v", next, ok)
+	}
+	next, ok = gift.NextPurchaseWindowStart(time.Date(2026, 11, 21, 20, 30, 0, 0, kyiv))
+	if !ok || !next.Equal(time.Date(2026, 11, 22, 19, 40, 0, 0, kyiv)) {
+		t.Fatalf("after closing: next=%v ok=%v", next, ok)
+	}
+	if _, ok := (StarGift{}).NextPurchaseWindowStart(time.Now()); ok {
+		t.Fatal("a gift without a window has no next opening")
+	}
+}

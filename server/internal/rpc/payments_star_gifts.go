@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iamxvbaba/td/tg"
 	"github.com/iamxvbaba/td/tgerr"
@@ -1579,8 +1580,17 @@ func tgStarGift(g domain.StarGift, now int64) *tg.StarGift {
 		gift.SetPerUserTotal(g.PerUserTotal)
 		gift.SetPerUserRemains(g.PerUserRemains)
 	}
-	if g.LockedUntilDate > 0 && int64(g.LockedUntilDate) > now {
-		gift.SetLockedUntilDate(g.LockedUntilDate)
+	lockedUntil := g.LockedUntilDate
+	if g.PurchaseWindowEnabled {
+		current := time.Unix(now, 0)
+		if !g.PurchaseWindowOpen(current) {
+			if next, ok := g.NextPurchaseWindowStart(current); ok {
+				lockedUntil = int(next.Unix())
+			}
+		}
+	}
+	if lockedUntil > 0 && int64(lockedUntil) > now {
+		gift.SetLockedUntilDate(lockedUntil)
 	}
 	if g.Auction {
 		gift.SetAuctionSlug(g.AuctionSlug)
