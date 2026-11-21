@@ -76,7 +76,11 @@ func remoteStatus(e *jsonhttp.Error) (int, string) {
 	switch e.Status {
 	case http.StatusBadRequest:
 		return http.StatusBadRequest, "invalid"
-	case http.StatusUnauthorized, http.StatusForbidden:
+	case http.StatusUnauthorized:
+		// An admin API 401 means the private server credential is stale or
+		// missing. Do not surface it as a user-level "forbidden" / "disabled".
+		return http.StatusBadGateway, "server_unavailable"
+	case http.StatusForbidden:
 		return http.StatusForbidden, "forbidden"
 	case http.StatusNotFound:
 		return http.StatusNotFound, "not_found"
