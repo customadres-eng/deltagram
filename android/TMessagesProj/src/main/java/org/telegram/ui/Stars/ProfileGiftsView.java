@@ -368,6 +368,23 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                     }
                 }
             }
+            // DeltaGram: on your own profile show every collectible gift as a
+            // draggable bubble, not only the pinned ones. Otherwise a user who
+            // has never pinned a gift sees an empty profile and assumes the
+            // bubbles are missing. Pinned gifts keep their priority (they are
+            // added first above and sorted first by the server).
+            if (canDrag) {
+                for (int i = 0; i < list.gifts.size() && gifts.size() < maxCount; i++) {
+                    final TL_stars.SavedStarGift savedGift = list.gifts.get(i);
+                    if (!savedGift.unsaved && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
+                        final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
+                        if (!giftIds.contains(gift.id)) {
+                            gifts.add(gift);
+                            giftIds.add(gift.id);
+                        }
+                    }
+                }
+            }
         }
 
         boolean changed = false;
