@@ -34,13 +34,6 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import androidx.media3.common.AudioAttributes;
-import androidx.media3.common.C;
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.PlaybackException;
-import androidx.media3.common.Player;
-import androidx.media3.exoplayer.ExoPlayer;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
@@ -117,13 +110,9 @@ public class DeltamentMusicSheet extends BottomSheet {
     private View searchContainer;
 
     private final ArrayList<DeltamentSoundCloudClient.Track> visible = new ArrayList<>();
-    private final ArrayList<DeltamentSoundCloudClient.Track> queue = new ArrayList<>();
-    private int queueIndex = -1;
-    private DeltamentSoundCloudClient.Track currentTrack;
+    private final DeltamentMusicPlayer music = DeltamentMusicPlayer.getInstance();
+    private ArrayList<DeltamentSoundCloudClient.Track> queue;
 
-    private ExoPlayer player;
-    private boolean prepared;
-    private boolean playing;
     private boolean queueMode;
 
     private int source = SOURCE_SOUNDCLOUD;
@@ -164,10 +153,16 @@ public class DeltamentMusicSheet extends BottomSheet {
         buildList();
         buildMiniPlayer();
 
+        this.queue = music.queue;
+        music.addListener(musicListener);
+        syncMiniFromPlayer();
+
         setOnDismissListener(new Runnable() {
             @Override
             public void run() {
-                releasePlayer();
+                // Playback lives in DeltamentMusicPlayer, so closing the sheet
+                // keeps the track running; just stop listening to its updates.
+                music.removeListener(musicListener);
                 handler.removeCallbacksAndMessages(null);
             }
         });
@@ -767,120 +762,77 @@ public class DeltamentMusicSheet extends BottomSheet {
 
     // ------------------------------------------------------------------ playback
 
-    private void playTrack(DeltamentSoundCloudClient.Track track) {
-        if (track == null) {
+    private final DeltamentMusicPlayer.Listener musicListener = new DeltamentMusicPlayer.Listener() {
+        @Override
+        public void onTrackChanged(DeltamentSoundCloudClient.Track track) {
+            if (track == null) {
+                hideMiniPlayerAnimated();
+                miniTitle.setText("");
+                return;
+            }
+            miniTitle.setText(track.title);
+            showMiniPlayerAnimated();
+            updateMiniControl();
+            setStatus("загрузка трека…");
+        }
+
+        @Override
+        public void onPlaybackStateChanged(boolean playing, boolean prepared) {
+            updateMiniControl();
+            if (prepared) {
+                setStatus("");
+            }
+        }
+
+        @Override
+        public void onPlaybackError(String message) {
+            updateMiniControl();
+            setStatus(message);
+        }
+    };
+
+    private void updateMiniControl() {
+        if (miniControl == null) {
             return;
         }
-        int existing = -1;
-        for (int i = 0; i < queue.size(); i++) {
-            if (queue.get(i).id == track.id) {
-                existing = i;
-                break;
-            }
+        final String next = music.isLoading() ? "…" : (music.isPlaying() ? "⏸" : "▶");
+        if (!next.contentEquals(miniControl.getText())) {
+            miniControl.setText(next);
+            pop(miniControl);
         }
-        if (existing < 0) {
-            queue.add(track);
-            existing = queue.size() - 1;
-        }
-        queueIndex = existing;
-        currentTrack = track;
-        miniTitle.setText(track.title);
-        showMiniPlayerAnimated();
-        miniControl.setText("…");
-        pop(miniControl);
-        setStatus("загрузка трека…");
-
-        DeltamentSoundCloudClient.resolveStreamUrl(track, new DeltamentSoundCloudClient.Callback<String>() {
-            @Override
-            public void onSuccess(String url) {
-                startPlayback(url);
-            }
-
-            @Override
-            public void onError(String message) {
-                miniControl.setText("▶");
-                setStatus(message);
-            }
-        });
     }
 
-    private void startPlayback(String url) {
-        releasePlayer();
-        try {
-            player = new ExoPlayer.Builder(context).build();
-            player.setAudioAttributes(new AudioAttributes.Builder()
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .setUsage(C.USAGE_MEDIA)
-                    .build(), true);
-            player.addListener(new Player.Listener() {
-                @Override
-                public void onPlaybackStateChanged(int state) {
-                    if (state == Player.STATE_READY) {
-                        prepared = true;
-                        playing = player.isPlaying();
-                        miniControl.setText("⏸");
-                        pop(miniControl);
-                        setStatus("");
-                    } else if (state == Player.STATE_ENDED) {
-                        playNext();
-                    }
-                }
-
-                @Override
-                public void onPlayerError(PlaybackException error) {
-                    playing = false;
-                    prepared = false;
-                    miniControl.setText("▶");
-                    setStatus(DeltamentSoundCloudClient.ERROR_STREAM);
-                }
-            });
-            player.setMediaItem(MediaItem.fromUri(url));
-            player.prepare();
-            player.play();
-        } catch (Throwable e) {
-            FileLog.e(e);
-            releasePlayer();
-            miniControl.setText("▶");
-            setStatus(DeltamentSoundCloudClient.ERROR_STREAM);
+    private void syncMiniFromPlayer() {
+        final DeltamentSoundCloudClient.Track track = music.currentTrack;
+        if (track == null) {
+            miniPlayer.setVisibility(View.GONE);
+            return;
         }
+        miniTitle.setText(track.title);
+        miniPlayer.setVisibility(View.VISIBLE);
+        miniPlayer.setAlpha(1f);
+        miniPlayer.setTranslationY(0f);
+        updateMiniControl();
+    }
+
+    private void playTrack(DeltamentSoundCloudClient.Track track) {
+        music.play(track);
     }
 
     private void togglePlayback() {
-        if (player == null || !prepared) {
-            if (currentTrack != null) {
-                playTrack(currentTrack);
-            }
-            return;
-        }
-        try {
-            if (player.isPlaying()) {
-                player.pause();
-                playing = false;
-                miniControl.setText("▶");
-            } else {
-                player.play();
-                playing = true;
-                miniControl.setText("⏸");
-            }
-            pop(miniControl);
-        } catch (Throwable e) {
-            FileLog.e(e);
-        }
+        music.toggle();
     }
 
     private void playNext() {
-        if (queueIndex + 1 < queue.size()) {
-            queueIndex++;
-            playTrack(queue.get(queueIndex));
-        } else {
-            playing = false;
-            prepared = false;
-            miniControl.setText("▶");
-        }
+        music.next();
     }
 
     private void stopPlayback() {
-        releasePlayer();
+        music.stop();
+        hideMiniPlayerAnimated();
+    }
+
+    private void hideMiniPlayerAnimated() {
         if (miniPlayer.getVisibility() == View.VISIBLE) {
             miniPlayer.animate().cancel();
             miniPlayer.animate().alpha(0f).translationY(dp(10))
@@ -892,20 +844,6 @@ public class DeltamentMusicSheet extends BottomSheet {
                     })
                     .start();
         }
-        currentTrack = null;
-        queueIndex = -1;
-    }
-
-    private void releasePlayer() {
-        if (player != null) {
-            try {
-                player.release();
-            } catch (Throwable ignored) {
-            }
-            player = null;
-        }
-        prepared = false;
-        playing = false;
     }
 
     // -------------------------------------------------------------------- queue
@@ -948,14 +886,13 @@ public class DeltamentMusicSheet extends BottomSheet {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(8), dp(10), dp(8), dp(10));
-            if (i == queueIndex) {
+            if (i == music.queueIndex) {
                 row.setBackground(ripple(0xFF2A2A2D, dp(12)));
             } else {
                 row.setBackground(ripple(0x00000000, dp(12)));
             }
             row.setOnClickListener(v -> {
-                queueIndex = indexOfTrack(track);
-                playTrack(track);
+                music.playAt(indexOfTrack(track));
                 renderQueue();
             });
 
@@ -966,7 +903,7 @@ public class DeltamentMusicSheet extends BottomSheet {
             final TextView title = new TextView(context);
             title.setText(track.title);
             title.setTextSize(15);
-            title.setTextColor(i == queueIndex ? COLOR_BLUE : COLOR_TEXT);
+            title.setTextColor(i == music.queueIndex ? COLOR_BLUE : COLOR_TEXT);
             title.setSingleLine(true);
             title.setEllipsize(TextUtils.TruncateAt.END);
             textColumn.addView(title, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
@@ -988,12 +925,10 @@ public class DeltamentMusicSheet extends BottomSheet {
                 final int index = indexOfTrack(track);
                 if (index >= 0) {
                     queue.remove(index);
-                    if (index < queueIndex) {
-                        queueIndex--;
-                    } else if (index == queueIndex) {
-                        releasePlayer();
-                        currentTrack = null;
-                        queueIndex = -1;
+                    if (index < music.queueIndex) {
+                        music.queueIndex--;
+                    } else if (index == music.queueIndex) {
+                        music.stop();
                         miniPlayer.setVisibility(View.GONE);
                     }
                 }
