@@ -7,22 +7,27 @@ import static org.telegram.ui.Stars.StarsController.findAttribute;
 
 import android.animation.TimeInterpolator;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
 
 import androidx.annotation.NonNull;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.tgnet.TLRPC;
@@ -47,6 +52,22 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private final ProfileActivity.AvatarImageView avatarImage;
     private final Theme.ResourcesProvider resourcesProvider;
 
+    // Free positioning of pinned gifts ("bubbles"). Positions are stored locally
+    // per account / profile / gift, because the MTProto API has no free placement.
+    private static final long DRAG_LONG_PRESS_MS = 350;
+    private static final String PREFS_NAME = "profile_gifts_positions";
+    private final boolean canDrag;
+
+    private Gift draggingGift;
+    private float dragCx, dragCy;
+    private float dragTouchOffsetX, dragTouchOffsetY;
+    private float downX, downY;
+    private boolean dragLongPressPosted;
+    private final Runnable dragLongPressRunnable = this::startDrag;
+
+    /** Size of the avatar box used for the last layout, for normalised offsets. */
+    private float lastAvatarWidth, lastAvatarHeight;
+
     private boolean active = true;
     public void setActive(boolean f) {
         this.active = f;
@@ -62,6 +83,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         this.avatarImage = avatarImage;
 
         this.resourcesProvider = resourcesProvider;
+
+        this.canDrag = dialogId == UserConfig.getInstance(currentAccount).getClientUserId();
     }
 
     public float expandProgress, collapseProgress;
@@ -146,6 +169,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.starUserGiftsLoaded);
 
+        cancelLongPress();
+        finishDrag(false);
+
         for (Gift gift : gifts) {
             gift.emojiDrawable.removeView(this);
         }
@@ -158,6 +184,45 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 update();
             }
         }
+    }
+
+    private SharedPreferences prefs() {
+        return ApplicationLoader.applicationContext == null ? null
+                : ApplicationLoader.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private String positionKey(long giftId) {
+        return currentAccount + "_" + dialogId + "_" + giftId;
+    }
+
+    private void loadPosition(Gift gift) {
+        final SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            return;
+        }
+        final String value = prefs.getString(positionKey(gift.id), null);
+        if (value == null) {
+            return;
+        }
+        final int comma = value.indexOf(',');
+        if (comma <= 0) {
+            return;
+        }
+        try {
+            gift.offsetX = Float.parseFloat(value.substring(0, comma));
+            gift.offsetY = Float.parseFloat(value.substring(comma + 1));
+        } catch (NumberFormatException ignore) {
+        }
+    }
+
+    private void savePosition(Gift gift) {
+        final SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            return;
+        }
+        prefs.edit()
+                .putString(positionKey(gift.id), gift.offsetX + "," + gift.offsetY)
+                .apply();
     }
 
     public final class Gift {
@@ -209,6 +274,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         public final RectF bounds = new RectF();
         public final ButtonBounce bounce = new ButtonBounce(ProfileGiftsView.this);
 
+        /** User offset from the default slot position, normalised to the avatar box. */
+        public float offsetX, offsetY;
+        /** Default slot position of the last draw, without the user offset. */
+        public float baseCx, baseCy;
+        /** Last drawn center, including the user offset. */
+        public float lastCx, lastCy;
+
         public void copy(Gift b) {
             gradient = b.gradient;
             emojiDrawable = b.emojiDrawable;
@@ -216,6 +288,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             animatedFloat = b.animatedFloat;
             particles = b.particles;
             position = b.position;
+            offsetX = b.offsetX;
+            offsetY = b.offsetY;
         }
 
         public void draw(
@@ -259,6 +333,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     public void update() {
         if (!MessagesController.getInstance(currentAccount).enableGiftsInProfile) {
             return;
+        }
+
+        if (draggingGift != null) {
+            finishDrag(true);
         }
 
         maxCount = MessagesController.getInstance(currentAccount).stargiftsPinnedToTopLimit;
@@ -325,6 +403,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 }
                 g.animatedFloat = new AnimatedFloat(this, 0, 320, null);
                 g.animatedFloat.force(0.0f);
+                loadPosition(g);
                 if (isAttachedToWindow()) {
                     g.emojiDrawable.addView(this);
                 }
@@ -392,6 +471,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         final float acx = ax + aw / 2.0f;
         final float acy = ay + ah / 2.0f;
+
+        lastAvatarWidth = aw;
+        lastAvatarHeight = ah;
 
         final float realCX = realX + realW / 2.0f;
         final float realCY = realY + realH / 2.0f;
@@ -461,14 +543,34 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 scale = AndroidUtilities.lerp(scale / 2f, scale, collapse);
             }
 
+            gift.baseCx = gx;
+            gift.baseCy = gy;
+            if (gift.offsetX != 0f || gift.offsetY != 0f) {
+                final float offsetAlpha = collapse;
+                gx += gift.offsetX * aw * offsetAlpha;
+                gy += gift.offsetY * ah * offsetAlpha;
+                // Keep custom positions on-screen after rotation / resize.
+                gx = clamp(gx, dragPad(), getWidth() - dragPad());
+                gy = clamp(gy, dragPad(), Math.max(dragPad(), expandY - dragPad()));
+            }
+            gift.lastCx = gx;
+            gift.lastCy = gy;
+
+            if (gift == draggingGift) {
+                continue;
+            }
             gift.draw(canvas, gx, gy, scale, 0, alpha, 1f);
+        }
+
+        if (draggingGift != null) {
+            draggingGift.draw(canvas, dragCx, dragCy, 1.15f, 0, 1f, 1f);
         }
 
         canvas.restore();
     }
 
     public Gift getGiftUnder(float x, float y) {
-        for (int i = 0; i < gifts.size(); ++i) {
+        for (int i = gifts.size() - 1; i >= 0; --i) {
             if (gifts.get(i).bounds.contains(x, y))
                 return gifts.get(i);
         }
@@ -480,30 +582,114 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!active) return false;
-        final Gift hit = getGiftUnder(event.getX(), event.getY());
-        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+        final int action = event.getActionMasked();
+
+        if (action == MotionEvent.ACTION_DOWN) {
+            final Gift hit = getGiftUnder(event.getX(), event.getY());
             pressedGift = hit;
+            downX = event.getX();
+            downY = event.getY();
             if (pressedGift != null) {
                 pressedGift.bounce.setPressed(true);
+                if (canDrag) {
+                    dragLongPressPosted = true;
+                    removeCallbacks(dragLongPressRunnable);
+                    postDelayed(dragLongPressRunnable, DRAG_LONG_PRESS_MS);
+                }
             }
-        } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
-            if (pressedGift != hit && pressedGift != null) {
-                pressedGift.bounce.setPressed(false);
-                pressedGift = null;
+            return pressedGift != null;
+        }
+
+        if (draggingGift != null) {
+            if (action == MotionEvent.ACTION_MOVE) {
+                dragCx = clamp(event.getX() + dragTouchOffsetX, dragPad(), getWidth() - dragPad());
+                dragCy = clamp(event.getY() + dragTouchOffsetY, dragPad(), Math.max(dragPad(), expandY - dragPad()));
+                invalidate();
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                finishDrag(action == MotionEvent.ACTION_UP);
             }
-        } else if (event.getAction() == MotionEvent.ACTION_UP) {
+            return true;
+        }
+
+        if (action == MotionEvent.ACTION_MOVE) {
+            if (pressedGift != null) {
+                final float dx = event.getX() - downX;
+                final float dy = event.getY() - downY;
+                final float slop = AndroidUtilities.touchSlop;
+                if (dx * dx + dy * dy > slop * slop) {
+                    cancelLongPress();
+                    pressedGift.bounce.setPressed(false);
+                    pressedGift = null;
+                }
+            }
+        } else if (action == MotionEvent.ACTION_UP) {
+            cancelLongPress();
             if (pressedGift != null) {
                 onGiftClick(pressedGift);
                 pressedGift.bounce.setPressed(false);
                 pressedGift = null;
             }
-        } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+        } else if (action == MotionEvent.ACTION_CANCEL) {
+            cancelLongPress();
             if (pressedGift != null) {
                 pressedGift.bounce.setPressed(false);
                 pressedGift = null;
             }
         }
         return pressedGift != null;
+    }
+
+    private void startDrag() {
+        dragLongPressPosted = false;
+        if (!canDrag || pressedGift == null || !active) {
+            return;
+        }
+        final Gift gift = pressedGift;
+        pressedGift = null;
+        draggingGift = gift;
+        gift.bounce.setPressed(false);
+        dragCx = gift.lastCx;
+        dragCy = gift.lastCy;
+        dragTouchOffsetX = dragCx - downX;
+        dragTouchOffsetY = dragCy - downY;
+        final ViewParent parent = getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(true);
+        }
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        invalidate();
+    }
+
+    private void finishDrag(boolean apply) {
+        final Gift gift = draggingGift;
+        draggingGift = null;
+        final ViewParent parent = getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(false);
+        }
+        if (gift != null && apply) {
+            if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
+                gift.offsetX = (dragCx - gift.baseCx) / lastAvatarWidth;
+                gift.offsetY = (dragCy - gift.baseCy) / lastAvatarHeight;
+                savePosition(gift);
+            }
+        }
+        invalidate();
+    }
+
+    private void cancelLongPress() {
+        if (dragLongPressPosted) {
+            dragLongPressPosted = false;
+            removeCallbacks(dragLongPressRunnable);
+        }
+    }
+
+    private float dragPad() {
+        return dpf2(24);
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return value < min ? min : (value > max ? max : value);
     }
 
     public void onGiftClick(Gift gift) {
