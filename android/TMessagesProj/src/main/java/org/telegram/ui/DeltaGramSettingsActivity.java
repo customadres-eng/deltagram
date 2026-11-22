@@ -207,7 +207,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         content.addView(section("Аккаунт"));
         content.addView(action("Домены .ton", "Покупка, продажа и привязка домена", R.drawable.settings_gram_24, v ->
                 presentFragment(new DeltamentDomainsActivity())));
-        content.addView(action("Карты и баланс", "Цвет, NFT и TON-адрес публичной карты", R.drawable.wallet_gram_small, v ->
+        content.addView(action("Карты и баланс", "Цвет и TON-адрес публичной карты", R.drawable.wallet_gram_small, v ->
                 presentFragment(new DeltamentCardSettingsActivity())));
         content.addView(action("Музыка", "Чарты SoundCloud и плеер DeltaGram", R.drawable.files_music, v ->
                 new DeltamentMusicSheet(getParentActivity()).show()));
