@@ -21023,13 +21023,21 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
 
         Drawable commentStickerDrawable = Theme.getThemeDrawable(Theme.key_drawable_commentSticker);
-        setDrawableBounds(commentStickerDrawable, sideStartX + dp(4), sideStartY + dp(4));
-        if (alpha != 1f) {
+        if (commentStickerDrawable != null) {
+            setDrawableBounds(commentStickerDrawable, sideStartX + dp(4), sideStartY + dp(4));
             commentStickerDrawable.setAlpha((int) (255 * alpha));
             commentStickerDrawable.draw(canvas);
             commentStickerDrawable.setAlpha(255);
-        } else {
-            commentStickerDrawable.draw(canvas);
+        }
+        // Some channel posts use the side button without a replies layout.
+        // Keep a visible label even when the themed sticker icon is absent.
+        if (commentLayout == null) {
+            Paint labelPaint = Theme.chat_stickerCommentCountPaint;
+            labelPaint.setColor(0xffffffff);
+            labelPaint.setAlpha((int) (255 * alpha));
+            labelPaint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText("Ком.", sideStartX + dp(16), sideStartY + dp(27), labelPaint);
+            labelPaint.setTextAlign(Paint.Align.LEFT);
         }
 
         if (commentLayout != null) {
