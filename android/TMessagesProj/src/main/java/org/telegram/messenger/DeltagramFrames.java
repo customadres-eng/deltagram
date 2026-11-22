@@ -1,7 +1,10 @@
 package org.telegram.messenger;
 
+import android.app.Activity;
+import android.app.Application;
 import android.graphics.Canvas;
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -40,6 +43,26 @@ public final class DeltagramFrames {
         synchronized (lock) {
             if (started) return;
             started = true;
+        }
+        if (ApplicationLoader.applicationContext instanceof Application) {
+            ((Application) ApplicationLoader.applicationContext).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+                @Override public void onActivityResumed(Activity activity) {
+                    // A stopped renderer has no frame callback to wake itself
+                    // after the app returns to the foreground.
+                    for (RLottieDrawable drawable : animations.values()) {
+                        if (!drawable.isRunning()) drawable.start();
+                    }
+                    invalidateViews();
+                }
+                @Override public void onActivityPaused(Activity activity) {
+                    for (RLottieDrawable drawable : animations.values()) drawable.stop();
+                }
+                @Override public void onActivityCreated(Activity activity, Bundle state) {}
+                @Override public void onActivityStarted(Activity activity) {}
+                @Override public void onActivityStopped(Activity activity) {}
+                @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
+                @Override public void onActivityDestroyed(Activity activity) {}
+            });
         }
         handler.post(DeltagramFrames::refresh);
     }
@@ -167,7 +190,14 @@ public final class DeltagramFrames {
         RLottieDrawable drawable = animation(kind);
         if (drawable == null) return;
         if (host != null && host.isAttachedToWindow() && !drawable.isRunning()) drawable.start();
+        // Artwork is inset inside its 512px Lottie canvas (the glass ring is
+        // only 406px wide). Expand about the avatar center to put the stroke
+        // over its perimeter instead of inside the portrait.
+        final float scale = "liquid_chrome_ring".equals(kind) ? 1.30f : 1.24f;
+        canvas.save();
+        canvas.scale(scale, scale, bounds.exactCenterX(), bounds.exactCenterY());
         drawable.setBounds(bounds);
         drawable.draw(canvas);
+        canvas.restore();
     }
 }
