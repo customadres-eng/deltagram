@@ -5429,7 +5429,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             (int) getImageReceiver().getImageY(),
                             (int) getImageReceiver().getImageX2(),
                             (int) getImageReceiver().getImageY2());
-                    org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, userId);
+                    org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, userId, this);
                 }
             }
         };
@@ -11688,9 +11688,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         nameTextView[a].setRightDrawable(null);
                     }
                 }
-                if (leftIcon == null && currentEncryptedChat == null && user.bot_verification_icon != 0) {
+                // A full-profile response can arrive after the lightweight user
+                // object. Prefer its verification when the cached user is stale.
+                long verificationIcon = user.bot_verification_icon != 0
+                        ? user.bot_verification_icon
+                        : userInfo != null && userInfo.bot_verification != null
+                        ? userInfo.bot_verification.icon : 0;
+                if (leftIcon == null && currentEncryptedChat == null && verificationIcon != 0) {
                     nameTextView[a].setLeftDrawableOutside(true);
-                    leftIcon = getBotVerificationDrawable(user.bot_verification_icon, false, a);
+                    leftIcon = getBotVerificationDrawable(verificationIcon, false, a);
                 } else {
                     nameTextView[a].setLeftDrawableOutside(false);
                 }
@@ -12006,10 +12012,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         nameTextView[a].setRightDrawable(null);
                     }
                 }
-                if (chat.bot_verification_icon != 0) {
+                long verificationIcon = chat.bot_verification_icon != 0
+                        ? chat.bot_verification_icon
+                        : chatInfo != null && chatInfo.bot_verification != null
+                        ? chatInfo.bot_verification.icon : 0;
+                if (verificationIcon != 0) {
                     nameTextView[a].setLeftDrawableOutside(true);
-                    nameTextView[a].setLeftDrawable(getBotVerificationDrawable(chat.bot_verification_icon, false, a));
+                    nameTextView[a].setLeftDrawable(getBotVerificationDrawable(verificationIcon, false, a));
                 } else {
+                    nameTextView[a].setLeftDrawableOutside(false);
                     nameTextView[a].setLeftDrawable(null);
                 }
                 if (a == 0 && onlineTextOverride != null) {
