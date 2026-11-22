@@ -367,7 +367,7 @@ public class BackupImageView extends View {
                     (int) imageReceiver.getImageY(),
                     (int) imageReceiver.getImageX2(),
                     (int) imageReceiver.getImageY2());
-            org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, deltagramFrameUserId);
+            org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, deltagramFrameUserId, this);
         }
     }
 

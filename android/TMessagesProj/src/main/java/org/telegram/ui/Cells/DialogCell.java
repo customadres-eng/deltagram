@@ -4796,7 +4796,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                     (int) avatarImage.getImageY(),
                     (int) avatarImage.getImageX2(),
                     (int) avatarImage.getImageY2());
-            org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, currentDialogId);
+            org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, currentDialogId, this);
         }
 
         if (animatingArchiveAvatar) {

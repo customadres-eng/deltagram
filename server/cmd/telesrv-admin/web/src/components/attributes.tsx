@@ -151,15 +151,11 @@ export function FrameAction({ id, current, onDone }: {
         <span>{t("attr.avatarFrame")}</span>
         <select value={frame} onChange={(e) => setFrame(e.target.value)}>
           <option value="">{t("attr.frameNone")}</option>
-          <option value="scratch">Scratch</option>
-          <option value="bite">Bite / chewed</option>
-          <option value="ember">Ember</option>
-          <option value="neon">Neon</option>
-          <option value="gold">Gold</option>
-          <option value="sakura">Sakura</option>
-          <option value="void">Void</option>
-          <option value="frost">Frost</option>
-          <option value="rainbow">Rainbow</option>
+          <option value="blue">Blue</option>
+          <option value="fire">Fire</option>
+          <option value="green">Green</option>
+          <option value="holographic_glass_ring">Holographic Glass Ring</option>
+          <option value="liquid_chrome_ring">Liquid Chrome Ring</option>
         </select>
       </label>
       <ActionButton

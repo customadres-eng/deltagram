@@ -15,7 +15,8 @@ func (db *DB) AvatarFrames(ctx context.Context) (map[int64]string, error) {
 	rows, err := db.pool.Query(ctx, `
 SELECT id, avatar_frame
 FROM users
-WHERE avatar_frame <> '' AND deleted_at IS NULL`)
+WHERE avatar_frame IN ('blue', 'fire', 'green', 'holographic_glass_ring', 'liquid_chrome_ring')
+  AND deleted_at IS NULL`)
 	if err != nil {
 		return nil, fmt.Errorf("list avatar frames: %w", err)
 	}
