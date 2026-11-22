@@ -4,6 +4,7 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.ui.Stars.StarsController.findAttribute;
+import static org.telegram.ui.Stars.StarsIntroActivity.setGiftImage;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -23,6 +24,7 @@ import androidx.annotation.NonNull;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
@@ -32,7 +34,6 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedFloat;
 import org.telegram.ui.Components.ButtonBounce;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -63,24 +64,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private final Paint bubbleFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bubbleRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bubbleHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final RectF bubbleHighlightRect = new RectF();
+    private final Paint bubbleGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF bubbleRimRect = new RectF();
-    private Shader bubbleGlassShader;
-    private float bubbleGlassShaderRadius;
-
-    /** Builds the glass gradient once per bubble size. */
-    private void ensureGlassShader(float radius) {
-        if (bubbleGlassShader != null && Math.abs(bubbleGlassShaderRadius - radius) < 0.5f) {
-            return;
-        }
-        bubbleGlassShaderRadius = radius;
-        bubbleGlassShader = new RadialGradient(
-                -radius * 0.32f, -radius * 0.36f, radius * 1.40f,
-                new int[]{0x38FFFFFF, 0x16FFFFFF, 0x09FFFFFF, 0x24FFFFFF},
-                new float[]{0f, 0.50f, 0.86f, 1f},
-                Shader.TileMode.CLAMP
-        );
-    }
 
     /** Positions are re-generated from a stable seed, like Telegram for iOS does. */
     private final Random bubbleRandom = new Random(System.currentTimeMillis() / 1000L);
@@ -201,7 +186,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.starUserGiftsLoaded);
 
         for (Gift gift : gifts) {
-            gift.emojiDrawable.addView(this);
+            if (gift.imageReceiver != null) {
+                gift.imageReceiver.onAttachedToWindow();
+            }
         }
 
         update();
@@ -217,7 +204,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         finishDrag(false);
 
         for (Gift gift : gifts) {
-            gift.emojiDrawable.removeView(this);
+            if (gift.imageReceiver != null) {
+                gift.imageReceiver.onDetachedFromWindow();
+            }
         }
     }
 
@@ -280,18 +269,26 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     public final class Gift {
 
         public final long id;
-        public final TLRPC.Document document;
-        public final long documentId;
+        /** Base gift id of a collectible, used to find the generic artwork. */
+        private final long giftId;
+        public TLRPC.Document document;
+        public long documentId;
         public final int color;
         public final String slug;
         private StarsReactionsSheet.Particles particles;
+        private boolean documentResolved;
 
         public int position = -1;
 
         public Gift(TL_stars.TL_starGiftUnique gift) {
             id = gift.id;
-            document = gift.getDocument();
-            documentId = document == null ? 0 : document.id;
+            giftId = gift.gift_id;
+            TLRPC.Document doc = gift.getDocument();
+            if (doc != null && doc.id == 0) {
+                doc = null;
+            }
+            document = doc;
+            documentId = doc == null ? 0 : doc.id;
             final TL_stars.starGiftAttributeBackdrop backdrop = findAttribute(gift.attributes, TL_stars.starGiftAttributeBackdrop.class);
             color = backdrop.center_color | 0xFF000000;
             slug = gift.slug;
@@ -300,6 +297,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         public Gift(TLRPC.TL_emojiStatusCollectible status) {
             id = status.collectible_id;
+            giftId = 0;
             document = null;
             documentId = status.document_id;
             color = status.center_color | 0xFF000000;
@@ -308,8 +306,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
 
         private void initParticles() {
-            particles = new StarsReactionsSheet.Particles(StarsReactionsSheet.Particles.TYPE_RADIAL, 6);
-            final float gsz = dp(48);
+            particles = new StarsReactionsSheet.Particles(StarsReactionsSheet.Particles.TYPE_RADIAL, 5);
+            final float gsz = dp(46);
             particles.bounds.set(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f);
         }
 
@@ -320,7 +318,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         public RadialGradient gradient;
         public final Matrix gradientMatrix = new Matrix();
         public Paint gradientPaint;
-        public AnimatedEmojiDrawable emojiDrawable;
+        public ImageReceiver imageReceiver;
         public AnimatedFloat animatedFloat;
 
         public final RectF bounds = new RectF();
@@ -340,7 +338,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         public void copy(Gift b) {
             gradient = b.gradient;
-            emojiDrawable = b.emojiDrawable;
             gradientPaint = b.gradientPaint;
             animatedFloat = b.animatedFloat;
             particles = b.particles;
@@ -354,6 +351,74 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             hoverDuration = b.hoverDuration;
             wiggleDuration = b.wiggleDuration;
             glowDuration = b.glowDuration;
+            if (documentId == 0 && b.documentId != 0) {
+                // Keep the artwork that was already resolved for this gift.
+                document = b.document;
+                documentId = b.documentId;
+                documentResolved = true;
+            }
+            if (b.imageReceiver != null && b.documentId == documentId) {
+                // Reuse the already running sticker animation instead of
+                // recreating an ImageReceiver on every list refresh.
+                imageReceiver = b.imageReceiver;
+                imageReceiver.setParentView(ProfileGiftsView.this);
+            } else if (b.imageReceiver != null) {
+                b.imageReceiver.onDetachedFromWindow();
+                b.imageReceiver = null;
+            }
+        }
+
+        /** Starts loading the gift artwork. Models are lottie documents on this server. */
+        public void ensureImageReceiver() {
+            if (imageReceiver != null || document == null || document.id == 0) {
+                return;
+            }
+            imageReceiver = new ImageReceiver(ProfileGiftsView.this);
+            setGiftImage(imageReceiver, document, 160);
+            if (isAttachedToWindow()) {
+                imageReceiver.onAttachedToWindow();
+            }
+        }
+
+        /**
+         * Some saved gifts arrive without a model attribute document. Fall back
+         * to the generic gift artwork of the same base gift, so the bubble never
+         * ends up as an empty coloured circle.
+         */
+        public void resolveDocument() {
+            if (documentId != 0 || documentResolved || giftId == 0) {
+                return;
+            }
+            documentResolved = true;
+            final StarsController starsController = StarsController.getInstance(currentAccount);
+            final TL_stars.StarGift base = starsController.getStarGift(giftId);
+            if (base != null && base.sticker != null) {
+                applyDocument(base.sticker);
+            } else {
+                starsController.getStarGift(giftId, gift -> {
+                    if (gift != null) {
+                        applyDocument(gift.sticker);
+                    }
+                });
+            }
+        }
+
+        private void applyDocument(TLRPC.Document doc) {
+            if (doc == null || doc.id == 0 || documentId != 0) {
+                return;
+            }
+            document = doc;
+            documentId = doc.id;
+            ensureImageReceiver();
+            invalidate();
+        }
+
+        public void release() {
+            if (imageReceiver != null) {
+                imageReceiver.onDetachedFromWindow();
+                imageReceiver = null;
+            }
+            gradient = null;
         }
 
         public void draw(
@@ -377,33 +442,36 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             final boolean defaultSkin = DeltamentBubbleSkins.isDefault(skin);
             final int accent = defaultSkin ? color : DeltamentBubbleSkins.accent(skin);
             final float radius = d / 2f;
+            final boolean dark = Theme.isCurrentThemeDark();
 
-            // Soft coloured halo behind the glass, the same idea as the glow
-            // node of the iOS cover component.
+            // Soft coloured glow behind the sphere. Telegram for iOS draws a
+            // 44pt tinted radial shadow behind its 32pt icon.
             if (gradientPaint != null) {
-                gradientPaint.setAlpha((int) (0x50 * alpha * glowAlpha));
+                gradientPaint.setAlpha((int) ((defaultSkin ? 0x58 : 0x78) * alpha * glowAlpha));
                 canvas.drawCircle(0, 0, dpf2(34), gradientPaint);
             }
 
-            ensureGlassShader(radius);
-
-            // Glass body: light comes from the upper left.
-            bubbleFillPaint.setShader(bubbleGlassShader);
-            bubbleFillPaint.setAlpha((int) (0xFF * alpha));
-            canvas.drawCircle(0, 0, radius, bubbleFillPaint);
+            // Sphere body: a smoky tint, mostly transparent, like the soap
+            // bubbles in the reference video.
             bubbleFillPaint.setShader(null);
+            bubbleFillPaint.setStyle(Paint.Style.FILL);
+            bubbleFillPaint.setColor(accent);
+            bubbleFillPaint.setAlpha((int) ((dark ? 0x1E : 0x12) * alpha));
+            canvas.drawCircle(0, 0, radius, bubbleFillPaint);
 
-            // Thin bright rim, with a brighter crescent on the upper left like
-            // a real glass ball.
+            // Thin light rim, with a brighter crescent at the top and a faint
+            // reflected arc at the bottom.
+            final float rimRadius = radius - dp(0.6f);
             bubbleRimPaint.setStyle(Paint.Style.STROKE);
-            bubbleRimPaint.setStrokeWidth(dp(1.1f));
-            bubbleRimPaint.setColor(defaultSkin ? 0xFFFFFFFF : accent);
-            bubbleRimPaint.setAlpha((int) ((defaultSkin ? 0.24f : 0.75f) * 0xFF * alpha));
-            final float rimRadius = radius - dp(0.55f);
+            bubbleRimPaint.setStrokeWidth(dp(1.05f));
+            bubbleRimPaint.setColor(dark ? 0xFFFFFFFF : 0xFF000000);
+            bubbleRimPaint.setAlpha((int) ((dark ? 0.30f : 0.20f) * 0xFF * alpha));
             canvas.drawCircle(0, 0, rimRadius, bubbleRimPaint);
             bubbleRimRect.set(-rimRadius, -rimRadius, rimRadius, rimRadius);
-            bubbleRimPaint.setAlpha((int) ((defaultSkin ? 0.62f : 0.95f) * 0xFF * alpha));
-            canvas.drawArc(bubbleRimRect, 158f, 112f, false, bubbleRimPaint);
+            bubbleRimPaint.setAlpha((int) ((dark ? 0.72f : 0.34f) * 0xFF * alpha));
+            canvas.drawArc(bubbleRimRect, 152f, 122f, false, bubbleRimPaint);
+            bubbleRimPaint.setAlpha((int) ((dark ? 0.22f : 0.12f) * 0xFF * alpha));
+            canvas.drawArc(bubbleRimRect, -18f, 62f, false, bubbleRimPaint);
 
             // Outer accent glow for the coloured skins.
             if (!defaultSkin) {
@@ -420,27 +488,28 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             }
 
             particles.process();
-            particles.draw(canvas, accent, alpha);
+            particles.draw(canvas, dark ? 0xFFFFFFFF : accent, alpha);
 
-            if (emojiDrawable != null) {
-                final int sz = dp(36);
-                emojiDrawable.setBounds(-sz / 2, -sz / 2 + dp(1), sz / 2, sz / 2 + dp(1));
-                emojiDrawable.setAlpha((int) (0xFF * alpha));
-                emojiDrawable.draw(canvas);
+            if (imageReceiver != null) {
+                final float sz = dp(28);
+                imageReceiver.setImageCoords(-sz / 2f, -sz / 2f, sz, sz);
+                imageReceiver.setAlpha(alpha);
+                imageReceiver.draw(canvas);
+            } else {
+                bubbleGlyphPaint.setStyle(Paint.Style.FILL);
+                bubbleGlyphPaint.setColor(dark ? 0xFFFFFFFF : 0xFF000000);
+                bubbleGlyphPaint.setAlpha((int) (0.7f * alpha * 0xFF));
+                bubbleGlyphPaint.setTextSize(dp(22));
+                bubbleGlyphPaint.setTextAlign(Paint.Align.CENTER);
+                final Paint.FontMetrics fm = bubbleGlyphPaint.getFontMetrics();
+                canvas.drawText("\u2605", 0, -(fm.ascent + fm.descent) / 2f, bubbleGlyphPaint);
             }
 
-            // Specular highlight on the upper left, the detail that reads as glass.
+            // Tiny specular dot on the upper left, the detail that reads as glass.
             bubbleHighlightPaint.setStyle(Paint.Style.FILL);
             bubbleHighlightPaint.setColor(0xFFFFFFFF);
-            canvas.save();
-            canvas.translate(-radius * 0.30f, -radius * 0.34f);
-            canvas.rotate(-35f);
-            bubbleHighlightRect.set(-radius * 0.30f, -radius * 0.09f, radius * 0.30f, radius * 0.09f);
-            bubbleHighlightPaint.setAlpha((int) (0x58 * alpha));
-            canvas.drawOval(bubbleHighlightRect, bubbleHighlightPaint);
-            canvas.restore();
-            bubbleHighlightPaint.setAlpha((int) (0x9E * alpha));
-            canvas.drawCircle(-radius * 0.38f, -radius * 0.48f, radius * 0.055f, bubbleHighlightPaint);
+            bubbleHighlightPaint.setAlpha((int) (0x66 * alpha));
+            canvas.drawCircle(-radius * 0.42f, -radius * 0.50f, radius * 0.045f, bubbleHighlightPaint);
 
             canvas.restore();
         }
@@ -538,11 +607,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 g.gradient = new RadialGradient(0, 0, dp(34), new int[]{g.color, Theme.multAlpha(g.color, 0.0f)}, new float[]{0, 1}, Shader.TileMode.CLAMP);
                 g.gradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
                 g.gradientPaint.setShader(g.gradient);
-                if (g.document != null) {
-                    g.emojiDrawable = AnimatedEmojiDrawable.make(currentAccount, AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, g.document);
-                } else {
-                    g.emojiDrawable = AnimatedEmojiDrawable.make(currentAccount, AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, g.documentId);
-                }
                 g.animatedFloat = new AnimatedFloat(this, 0, 320, null);
                 g.animatedFloat.force(0.0f);
                 // Idle float parameters, staggered like the iOS cover does.
@@ -551,10 +615,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 g.wiggleDuration = 2f + bubbleRandom.nextFloat();
                 g.glowDuration = 2f + bubbleRandom.nextFloat();
                 loadPosition(g);
-                if (isAttachedToWindow()) {
-                    g.emojiDrawable.addView(this);
-                }
             }
+            g.resolveDocument();
+            g.ensureImageReceiver();
         }
 
         List<Integer> positions = new ArrayList<>();
@@ -572,9 +635,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 }
             }
             if (newGift == null) {
-                g.emojiDrawable.removeView(this);
-                g.emojiDrawable = null;
-                g.gradient = null;
+                g.release();
             } else {
                 positions.remove((Object) g.position);
             }
