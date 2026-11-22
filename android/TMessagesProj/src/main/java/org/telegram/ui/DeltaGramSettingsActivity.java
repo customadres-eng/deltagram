@@ -19,7 +19,6 @@ import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
-import org.telegram.messenger.DeltagramFrames;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -35,6 +34,7 @@ import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
+import org.telegram.ui.Cells.AppIconsSelectorCell;
 import org.telegram.ui.Wallet.DeltamentCardSettingsActivity;
 import org.telegram.ui.Wallet.DeltamentDomainsActivity;
 import org.telegram.ui.Wallet.DeltamentMusicSheet;
@@ -42,7 +42,7 @@ import org.telegram.ui.Wallet.DeltamentMusicSheet;
 /**
  * DeltaGram settings.
  *
- * DeltaGram preferences: General / Appearance / Chats / Badges / Other.
+ * DeltaGram preferences: General / Appearance / Chats / Other.
  * Every row is wired to a real DeltaGram or Telegram setting.
  */
 public class DeltaGramSettingsActivity extends BaseFragment {
@@ -51,6 +51,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     public static final int PAGE_GENERAL = 1;
     public static final int PAGE_APPEARANCE = 2;
     public static final int PAGE_CHATS = 3;
+    // Kept for old deep links; badges are no longer a settings page.
     public static final int PAGE_BADGES = 4;
     public static final int PAGE_OTHER = 5;
 
@@ -119,7 +120,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 buildChats(content);
                 break;
             case PAGE_BADGES:
-                buildBadges(content);
+                buildMain(content);
                 break;
             case PAGE_OTHER:
                 buildOther(content);
@@ -149,8 +150,6 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 return "Внешний вид";
             case PAGE_CHATS:
                 return "Чаты";
-            case PAGE_BADGES:
-                return "Бейджи и рамки";
             case PAGE_OTHER:
                 return "Другое";
             case PAGE_MAIN:
@@ -206,7 +205,6 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         content.addView(category("Чаты", "Свайпы, двойной тап, реакции", R.drawable.msg_discussion, PAGE_CHATS));
 
         content.addView(section("Аккаунт"));
-        content.addView(category("Бейджи и рамки", "Публичная рамка аватара DeltaGram", R.drawable.star_small_inner, PAGE_BADGES));
         content.addView(action("Домены .ton", "Покупка, продажа и привязка домена", R.drawable.settings_gram_24, v ->
                 presentFragment(new DeltamentDomainsActivity())));
         content.addView(action("Карты и баланс", "Цвет, NFT и TON-адрес публичной карты", R.drawable.wallet_gram_small, v ->
@@ -273,9 +271,11 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 "Акценты, обои, ночной режим",
                 null, R.drawable.msg_theme, v ->
                         presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_BASIC)));
-        addAction(content, "Иконка приложения",
-                "Выбрать иконку DeltaGram на рабочем столе",
-                appIconLabel(), R.drawable.msg_customize, v -> showAppIconDialog());
+        content.addView(section("Иконка приложения"));
+        // Use Telegram's actual interactive selector with adaptive icon
+        // previews, premium locks and selection animation.
+        content.addView(new AppIconsSelectorCell(getParentActivity(), this, currentAccount),
+                LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 120));
         addAction(content, "Иконки и панели",
                 "Настройки интерфейса Telegram",
                 null, R.drawable.msg_customize, v ->
@@ -298,35 +298,6 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 "Автозагрузка, звуки и прочее",
                 null, R.drawable.msg_discussion, v ->
                         presentFragment(new SettingsActivity()));
-    }
-
-    private void buildBadges(LinearLayout content) {
-        long userId = UserConfig.getInstance(currentAccount).getClientUserId();
-        String frame = userId == 0 ? null : DeltagramFrames.frameFor(userId);
-
-        content.addView(section("Публичная рамка"));
-        TextView status = new TextView(getParentActivity());
-        status.setText(frame == null
-                ? "Рамка не получена. Её выдаёт @deltagram_robot или админ DeltaGram."
-                : "Активная рамка: " + frame + "\nЕё видят все пользователи DeltaGram в профиле, чатах и списке чатов.");
-        status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-        status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-        status.setLineSpacing(dp(3), 1f);
-        status.setPadding(dp(21), dp(12), dp(21), dp(12));
-        content.addView(status, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
-        content.addView(action("Открыть @deltagram_robot", "Получить или сменить рамку", R.drawable.star_small_inner, v ->
-                Browser.openUrl(getParentActivity(), "https://t.me/deltagram_robot")));
-        content.addView(action("Публичная карта", "Цвет, NFT и TON-адрес видны в профиле", R.drawable.wallet_gram_small, v ->
-                presentFragment(new DeltamentCardSettingsActivity())));
-
-        TextView note = new TextView(getParentActivity());
-        note.setText("Рамка хранится на сервере DeltaGram и подтягивается в клиент автоматически. Перезапуск не нужен.");
-        note.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-        note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        note.setLineSpacing(dp(2), 1f);
-        note.setPadding(dp(21), dp(6), dp(21), dp(12));
-        content.addView(note, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
     }
 
     private void buildOther(LinearLayout content) {
@@ -380,34 +351,6 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         NotificationCenter.getInstance(currentAccount).postNotificationName(
                 NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
         finishFragment();
-    }
-
-    private String appIconLabel() {
-        for (LauncherIconController.LauncherIcon icon : LauncherIconController.LauncherIcon.values()) {
-            if (LauncherIconController.isEnabled(icon)) {
-                return LocaleController.getString(icon.title);
-            }
-        }
-        return LocaleController.getString(LauncherIconController.LauncherIcon.DEFAULT.title);
-    }
-
-    private void showAppIconDialog() {
-        LauncherIconController.LauncherIcon[] icons = LauncherIconController.LauncherIcon.values();
-        CharSequence[] labels = new CharSequence[icons.length];
-        for (int i = 0; i < icons.length; i++) {
-            labels[i] = LocaleController.getString(icons[i].title);
-        }
-        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
-        builder.setTitle("Иконка приложения");
-        builder.setItems(labels, (dialog, which) -> {
-            LauncherIconController.setIcon(icons[which]);
-            if (lastValueView != null) {
-                lastValueView.setText(LocaleController.getString(icons[which].title));
-            }
-            BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Иконка DeltaGram изменена").show();
-        });
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-        builder.show();
     }
 
     private void showSwipeActionDialog() {
