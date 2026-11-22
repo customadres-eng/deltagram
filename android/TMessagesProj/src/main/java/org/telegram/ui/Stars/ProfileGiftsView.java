@@ -1314,7 +1314,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         flingSpinTurns = speed > dp(2600) ? 3 : (speed > dp(1400) ? 2 : 1);
         final float direction = Math.abs(vx) > dp(120) ? vx : vy;
         flingSpinDir = direction >= 0f ? 1 : -1;
-        performHapticFeedback(HapticFeedbackConstants.VIBRATE);
+        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
         invalidate();
     }
 
