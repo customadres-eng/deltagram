@@ -511,7 +511,7 @@ public class ProfileActionsView extends View {
     }
 
     public float getRoundRadius() {
-        return dp(16);
+        return dp(22);
     }
 
     private Action hit = null;
