@@ -7339,6 +7339,16 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         String comment = LocaleController.formatShortNumber(commentCount, null);
                         commentWidth = totalCommentWidth = (int) Math.ceil(Theme.chat_stickerCommentCountPaint.measureText(comment));
                         commentLayout = new StaticLayout(comment, Theme.chat_stickerCommentCountPaint, commentWidth + dp(2), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+                    } else if (!isRepliesChat) {
+                        // The side comment button used to become an unlabeled
+                        // square when a channel post had no replies yet.
+                        String label = "Ком.";
+                        CharSequence shortLabel = TextUtils.ellipsize(label,
+                                Theme.chat_stickerCommentCountPaint, dp(30), TextUtils.TruncateAt.END);
+                        commentWidth = totalCommentWidth = (int) Math.ceil(
+                                Theme.chat_stickerCommentCountPaint.measureText(shortLabel.toString()));
+                        commentLayout = new StaticLayout(shortLabel, Theme.chat_stickerCommentCountPaint,
+                                dp(32), Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false);
                     } else {
                         commentLayout = null;
                     }
