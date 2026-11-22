@@ -145,6 +145,18 @@ public final class DeltagramBanners {
         handler.post(DeltagramBanners::refresh);
     }
 
+    /** Make a successful upload visible immediately, before the registry poll. */
+    public static void setUploaded(long userId, String token, byte[] image) {
+        if (userId <= 0 || TextUtils.isEmpty(token)) return;
+        String url = BASE_URL + "/api/banners/" + userId + "?v=" + token;
+        Bitmap bitmap = BitmapFactory.decodeByteArray(image, 0, image.length);
+        synchronized (lock) {
+            banners.put(userId, token);
+            if (bitmap != null) cache.put(userId + ":" + url, bitmap);
+        }
+        refreshNow();
+    }
+
     private static void refresh() {
         if (inFlight) {
             return;

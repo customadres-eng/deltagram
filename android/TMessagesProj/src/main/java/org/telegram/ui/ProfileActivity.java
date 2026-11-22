@@ -147,6 +147,7 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.DeltagramBanners;
 import org.telegram.messenger.DeltagramCards;
+import org.telegram.messenger.DeltagramVerifications;
 import org.telegram.ui.Wallet.DeltamentPublicCardSheet;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
@@ -1407,10 +1408,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     final int srcY = (banner.getHeight() - srcH) / 2;
                     bannerSrc.set(srcX, srcY, srcX + srcW, srcY + srcH);
                     bannerDst.set(0, 0, getMeasuredWidth(), y1);
-                    bannerPaint.setAlpha((int) (0xFF * progressToGradient));
+                    // Banner visibility must not depend on whether this peer
+                    // has a custom profile color (the default is false).
+                    final float bannerAlpha = playProfileAnimation == 0 ? 1f : avatarAnimationProgress;
+                    bannerPaint.setAlpha((int) (0xFF * bannerAlpha));
                     canvas.drawBitmap(banner, bannerSrc, bannerDst, bannerPaint);
-                    bannerPaint.setAlpha((int) (0x44 * progressToGradient));
+                    bannerPaint.setShader(null);
+                    bannerPaint.setColor(0x44000000);
                     canvas.drawRect(0, 0, getMeasuredWidth(), y1, bannerPaint);
+                    bannerPaint.setColor(Color.WHITE);
                 }
                 if (progressToGradient < 1 && banner == null) {
                     canvas.drawRect(0, 0, getMeasuredWidth(), y1, paint);
@@ -11693,7 +11699,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 long verificationIcon = user.bot_verification_icon != 0
                         ? user.bot_verification_icon
                         : userInfo != null && userInfo.bot_verification != null
-                        ? userInfo.bot_verification.icon : 0;
+                        ? userInfo.bot_verification.icon : DeltagramVerifications.iconFor(userId);
                 if (leftIcon == null && currentEncryptedChat == null && verificationIcon != 0) {
                     nameTextView[a].setLeftDrawableOutside(true);
                     leftIcon = getBotVerificationDrawable(verificationIcon, false, a);
@@ -13191,7 +13197,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             try (java.io.InputStream is2 = getParentActivity().getContentResolver().openInputStream(uri)) {
                 bitmap = BitmapFactory.decodeStream(is2, null, opts);
             }
-            if (bitmap == null) return;
+            if (bitmap == null) {
+                BulletinFactory.of(this).createErrorBulletin("Не удалось прочитать изображение").show();
+                return;
+            }
             // Crop to the profile banner cover ratio before upload. Without this
             // a tall photo is scaled by width and appears extremely zoomed in.
             final int sourceW = bitmap.getWidth(), sourceH = bitmap.getHeight();
@@ -13212,13 +13221,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             byte[] bytes = out.toByteArray();
             bitmap.recycle();
             DeltagramCards.uploadBanner(currentAccount, bytes, "image/jpeg", (token, error) -> {
-                if (error != null) {
-                    BulletinFactory.of(this).createErrorBulletin(error).show();
+                if (error != null || TextUtils.isEmpty(token)) {
+                    BulletinFactory.of(this).createErrorBulletin(error != null ? error : "Баннер не сохранён").show();
                     return;
                 }
-                DeltagramBanners.refreshNow();
+                DeltagramBanners.setUploaded(getUserConfig().getClientUserId(), token, bytes);
                 BulletinFactory.of(this).createSuccessBulletin("Баннер обновлён").show();
                 if (listAdapter != null) listAdapter.notifyDataSetChanged();
+                if (topView != null) topView.invalidate();
                 if (fragmentView != null) fragmentView.invalidate();
             });
         } catch (Exception e) {
@@ -13231,7 +13241,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
         if (requestCode == 5002) {
             if (resultCode == android.app.Activity.RESULT_OK && data != null) {
-                uploadBanner(data.getData());
+                Uri selected = data.getData();
+                if (selected == null && data.getClipData() != null && data.getClipData().getItemCount() > 0) {
+                    selected = data.getClipData().getItemAt(0).getUri();
+                }
+                if (selected != null) {
+                    uploadBanner(selected);
+                } else {
+                    BulletinFactory.of(this).createErrorBulletin("Фото не выбрано").show();
+                }
             }
             return;
         }
@@ -14284,8 +14302,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         final long did = getDialogId();
                         TLObject obj = getMessagesController().getUserOrChat(did);
                         TL_bots.BotVerification bot_verification = userInfo != null ? userInfo.bot_verification : chatInfo != null ? chatInfo.bot_verification : null;
+                        long fallbackIcon = userId != 0 && bot_verification == null
+                                ? DeltagramVerifications.iconFor(userId) : 0;
                         Long bot_manager_id = userInfo != null && TLObject.hasFlag(userInfo.flags2, TLObject.FLAG_25) ? userInfo.bot_manager_id : null;
-                        if (botAppRow >= 0 || bot_verification != null || bot_manager_id != null) {
+                        if (botAppRow >= 0 || bot_verification != null || fallbackIcon != 0 || bot_manager_id != null) {
                             cell.setFixedSize(0);
                             final TLRPC.User user = getMessagesController().getUser(userId);
                             final boolean botOwner = user != null && user.bot && user.bot_can_edit;
@@ -14295,15 +14315,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                                 sb.append(AndroidUtilities.replaceSingleTag(getString(botOwner ? R.string.ProfileBotOpenAppInfoOwner : R.string.ProfileBotOpenAppInfo), () -> {
                                     Browser.openUrl(getContext(), getString(botOwner ? R.string.ProfileBotOpenAppInfoOwnerLink : R.string.ProfileBotOpenAppInfoLink));
                                 }));
-                                if (bot_verification != null || bot_manager_id != null) {
+                                if (bot_verification != null || fallbackIcon != 0 || bot_manager_id != null) {
                                     sb.append("\n\n\n");
                                 }
                             }
-                            if (bot_verification != null) {
+                            if (bot_verification != null || fallbackIcon != 0) {
                                 sb.append("x");
-                                sb.setSpan(new AnimatedEmojiSpan(bot_verification.icon, cell.getTextView().getPaint().getFontMetricsInt()), sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                sb.setSpan(new AnimatedEmojiSpan(bot_verification != null ? bot_verification.icon : fallbackIcon,
+                                        cell.getTextView().getPaint().getFontMetricsInt()), sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                                 sb.append(" ");
-                                SpannableString description = new SpannableString(MessageObject.formatTextWithEntities(bot_verification.description));
+                                SpannableString description = new SpannableString(bot_verification != null
+                                        ? MessageObject.formatTextWithEntities(bot_verification.description)
+                                        : "Подтверждён сторонней организацией");
                                 try {
                                     AndroidUtilities.addLinksSafe(description, Linkify.WEB_URLS, false, false);
                                     URLSpan[] spans = description.getSpans(0, description.length(), URLSpan.class);
