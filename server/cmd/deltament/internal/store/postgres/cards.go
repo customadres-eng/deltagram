@@ -102,8 +102,21 @@ func (db *DB) ResolveUsername(ctx context.Context, username string) (int64, erro
 	username = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(username), "@"))
 	var id int64
 	err := db.q.QueryRow(ctx, `
-		SELECT id FROM users
-		WHERE lower(username) = lower($1) AND username <> '' AND deleted_at IS NULL
+		SELECT u.id FROM users u
+		WHERE u.deleted_at IS NULL AND (
+			(u.username <> '' AND lower(u.username) = lower($1))
+			OR EXISTS (
+				SELECT 1 FROM peer_usernames p
+				WHERE p.username_lower = lower($1)
+				  AND p.peer_type = 'user' AND p.peer_id = u.id AND p.active
+			)
+			OR EXISTS (
+				SELECT 1 FROM collectible_usernames c
+				WHERE c.username_lower = lower($1)
+				  AND c.owner_peer_type = 'user' AND c.owner_peer_id = u.id
+				  AND c.status <> 'burned'
+			)
+		)
 		LIMIT 1`, username).Scan(&id)
 	return id, wrap(err)
 }
