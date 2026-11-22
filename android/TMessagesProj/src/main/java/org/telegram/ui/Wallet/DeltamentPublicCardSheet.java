@@ -67,8 +67,6 @@ public class DeltamentPublicCardSheet extends BottomSheet {
         DeltamentCardStyle.apply(gram, card.colorId);
         gram.getBalanceView().setText("GRAM " + WalletCardComponent.formatGrams(card.ton), false);
         gram.getUsdBalanceView().setText("≈ " + DeltagramCurrency.fromTon(card.ton), false);
-        DeltamentNftSticker gramNft = new DeltamentNftSticker(context, gram, false);
-        gramNft.setNft(card.nftUrl(), card.nftX, card.nftY, card.nftScale, card.nftRotation);
         gram.setOnQrClickListener(v -> showQr(context, card, 0, resourcesProvider));
 
         WalletCardComponent stars = new WalletCardComponent(context, true);
