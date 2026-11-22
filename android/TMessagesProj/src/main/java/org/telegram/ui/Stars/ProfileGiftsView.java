@@ -9,6 +9,7 @@ import static org.telegram.ui.Stars.StarsIntroActivity.setGiftImage;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
@@ -17,6 +18,7 @@ import android.graphics.Shader;
 import android.os.SystemClock;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewParent;
 
@@ -88,6 +90,27 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     private Gift draggingGift;
     private float dragCx, dragCy;
+    /** Lagged render position of the dragged bubble (elastic follow). */
+    private float dragRenderX, dragRenderY;
+    /** Animated lift of the dragged bubble. */
+    private float dragLift = 1f;
+    /** Stretch along the motion direction, 0..0.2. */
+    private float dragStretch, dragStretchAngle;
+    /** Smoothed finger velocity, px per millisecond. */
+    private float dragVelX, dragVelY;
+    private float lastMoveX, lastMoveY;
+    private long lastMoveTime;
+    private long lastFrameTime;
+    private VelocityTracker velocityTracker;
+    /** Release velocity, px per second. */
+    private float lastVelocityX, lastVelocityY;
+
+    /** Fling spin around the avatar. */
+    private long flingSpinStart = -1L;
+    private long flingSpinDuration = 2800L;
+    private int flingSpinTurns = 1;
+    private int flingSpinDir = 1;
+
     private float dragTouchOffsetX, dragTouchOffsetY;
     private float downX, downY;
     private boolean dragLongPressPosted;
@@ -202,6 +225,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         cancelDragLongPress();
         finishDrag(false);
+        releaseVelocityTracker();
+        flingSpinStart = -1L;
+        lastFrameTime = 0L;
 
         for (Gift gift : gifts) {
             if (gift.imageReceiver != null) {
@@ -247,8 +273,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (!Float.isNaN(x) && !Float.isInfinite(x) && !Float.isNaN(y) && !Float.isInfinite(y)) {
                 // Sanity clamp: a corrupt/infinite offset used to push every
                 // bubble off-screen and made the whole collection disappear.
-                gift.offsetX = Math.max(-2f, Math.min(2f, x));
-                gift.offsetY = Math.max(-2f, Math.min(2f, y));
+                gift.offsetX = Math.max(-6f, Math.min(6f, x));
+                gift.offsetY = Math.max(-6f, Math.min(6f, y));
             } else {
                 prefs.edit().remove(positionKey(gift.id)).apply();
             }
@@ -330,6 +356,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         public float baseCx, baseCy;
         /** Last drawn center, including the user offset. */
         public float lastCx, lastCy;
+
+        /** Glide back to the layout after the user releases the bubble. */
+        public long settleStart;
+        public float settleFromX, settleFromY, settleFromScale = 1f;
 
         /** Orbit slot around the avatar, in the style of Telegram for iOS. */
         public float orbitDistance, orbitAngle, orbitScale = 1f;
@@ -426,17 +456,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 float cx, float cy,
                 float ascale, float rotate,
                 float alpha,
-                float glowAlpha
+                float glowAlpha,
+                float stretch, float stretchAngle
         ) {
             if (alpha <= 0.0f) return;
             final float d = dp(54);
             final float hit = dp(60);
             bounds.set(cx - hit / 2f, cy - hit / 2f, cx + hit / 2f, cy + hit / 2f);
-            canvas.save();
-            canvas.translate(cx, cy);
-            canvas.rotate(rotate);
-            final float scale = ascale * bounce.getScale(0.1f);
-            canvas.scale(scale, scale);
 
             final int skin = DeltamentBubbleSkins.get();
             final boolean defaultSkin = DeltamentBubbleSkins.isDefault(skin);
@@ -444,54 +470,105 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             final float radius = d / 2f;
             final boolean dark = Theme.isCurrentThemeDark();
 
-            // Soft coloured glow behind the sphere. Telegram for iOS draws a
-            // 44pt tinted radial shadow behind its 32pt icon.
+            ensureSphereShaders(radius, accent, dark);
+
+            canvas.save();
+            canvas.translate(cx, cy);
+            // Squash/stretch along the motion direction: it sells the illusion
+            // of a soft, floating object instead of a flat sticker.
+            if (stretch > 0.001f) {
+                canvas.rotate(stretchAngle);
+                canvas.scale(1f + stretch, 1f - stretch * 0.62f);
+                canvas.rotate(-stretchAngle);
+            }
+            canvas.rotate(rotate);
+            final float scale = ascale * bounce.getScale(0.1f);
+            canvas.scale(scale, scale);
+
+            // Tinted halo: a wide, very soft coloured bloom behind the sphere.
             if (gradientPaint != null) {
-                gradientPaint.setAlpha((int) ((defaultSkin ? 0x58 : 0x78) * alpha * glowAlpha));
-                canvas.drawCircle(0, 0, dpf2(34), gradientPaint);
+                gradientPaint.setAlpha((int) ((defaultSkin ? 0x4A : 0x66) * alpha * glowAlpha));
+                canvas.drawCircle(0, 0, radius * 1.62f, gradientPaint);
             }
 
-            // Sphere body: a smoky tint, mostly transparent, like the soap
-            // bubbles in the reference video.
-            bubbleFillPaint.setShader(null);
+            // Contact shadow: the ball floats a few pixels above the surface.
+            canvas.save();
+            canvas.translate(radius * 0.04f, radius * 0.46f);
+            canvas.scale(1.02f, 0.46f);
             bubbleFillPaint.setStyle(Paint.Style.FILL);
-            bubbleFillPaint.setColor(accent);
-            bubbleFillPaint.setAlpha((int) ((dark ? 0x1E : 0x12) * alpha));
+            bubbleFillPaint.setShader(sphereShadowShader);
+            bubbleFillPaint.setAlpha((int) (0xC4 * alpha));
+            canvas.drawCircle(0, 0, radius * 1.20f, bubbleFillPaint);
+            canvas.restore();
+
+            // Glass body: a coloured volume lit from the upper left.
+            bubbleFillPaint.setShader(sphereBodyShader);
+            bubbleFillPaint.setAlpha((int) (0xFF * alpha));
             canvas.drawCircle(0, 0, radius, bubbleFillPaint);
 
-            // Thin light rim, with a brighter crescent at the top and a faint
-            // reflected arc at the bottom.
-            final float rimRadius = radius - dp(0.6f);
-            bubbleRimPaint.setStyle(Paint.Style.STROKE);
-            bubbleRimPaint.setStrokeWidth(dp(1.05f));
-            bubbleRimPaint.setColor(dark ? 0xFFFFFFFF : 0xFF000000);
-            bubbleRimPaint.setAlpha((int) ((dark ? 0.30f : 0.20f) * 0xFF * alpha));
-            canvas.drawCircle(0, 0, rimRadius, bubbleRimPaint);
-            bubbleRimRect.set(-rimRadius, -rimRadius, rimRadius, rimRadius);
-            bubbleRimPaint.setAlpha((int) ((dark ? 0.72f : 0.34f) * 0xFF * alpha));
-            canvas.drawArc(bubbleRimRect, 152f, 122f, false, bubbleRimPaint);
-            bubbleRimPaint.setAlpha((int) ((dark ? 0.22f : 0.12f) * 0xFF * alpha));
-            canvas.drawArc(bubbleRimRect, -18f, 62f, false, bubbleRimPaint);
+            // Occlusion at the rim plus shadow on the lower half: this is what
+            // makes the sphere read as a sphere instead of a flat disc.
+            bubbleFillPaint.setShader(sphereInnerShader);
+            canvas.drawCircle(0, 0, radius, bubbleFillPaint);
+            bubbleFillPaint.setShader(sphereAOShader);
+            canvas.drawCircle(0, 0, radius, bubbleFillPaint);
+            bubbleFillPaint.setShader(null);
 
-            // Outer accent glow for the coloured skins.
+            // Bright rim running along the lit edge.
+            final float rimRadius = radius - dp(0.7f);
+            bubbleRimPaint.setStyle(Paint.Style.STROKE);
+            bubbleRimPaint.setStrokeWidth(dp(1.35f));
+            bubbleRimPaint.setShader(sphereRimShader);
+            bubbleRimPaint.setAlpha((int) (0xFF * alpha));
+            canvas.drawCircle(0, 0, rimRadius, bubbleRimPaint);
+            bubbleRimPaint.setShader(null);
+
+            // Thick-glass crescent on the upper left.
+            bubbleRimRect.set(-rimRadius, -rimRadius, rimRadius, rimRadius);
+            bubbleRimPaint.setColor(0xFFFFFFFF);
+            bubbleRimPaint.setStrokeWidth(dp(1.7f));
+            bubbleRimPaint.setAlpha((int) ((dark ? 0.92f : 0.55f) * 0xFF * alpha));
+            canvas.drawArc(bubbleRimRect, 196f, 112f, false, bubbleRimPaint);
+
+            // Accent caustic focused on the bottom inner edge.
+            final float causticRadius = radius * 0.885f;
+            bubbleRimRect.set(-causticRadius, -causticRadius, causticRadius, causticRadius);
+            bubbleRimPaint.setColor(accent);
+            bubbleRimPaint.setStrokeWidth(dp(2.6f));
+            bubbleRimPaint.setAlpha((int) ((dark ? 0.72f : 0.46f) * 0xFF * alpha));
+            canvas.drawArc(bubbleRimRect, 22f, 136f, false, bubbleRimPaint);
+
+            // Soap-film iridescence, kept very faint.
+            final float filmRadius = radius * 0.955f;
+            bubbleRimRect.set(-filmRadius, -filmRadius, filmRadius, filmRadius);
+            bubbleRimPaint.setStrokeWidth(dp(1.5f));
+            bubbleRimPaint.setColor(0xFF8FE8FF);
+            bubbleRimPaint.setAlpha((int) (0.30f * 0xFF * alpha));
+            canvas.drawArc(bubbleRimRect, 200f, 44f, false, bubbleRimPaint);
+            bubbleRimPaint.setColor(0xFFFF9BE0);
+            bubbleRimPaint.setAlpha((int) (0.24f * 0xFF * alpha));
+            canvas.drawArc(bubbleRimRect, 16f, 40f, false, bubbleRimPaint);
+
+            // Coloured skins add their own ring and bloom.
             if (!defaultSkin) {
                 skinGlowPaint.setStyle(Paint.Style.STROKE);
                 skinGlowPaint.setStrokeWidth(dp(5f));
                 skinGlowPaint.setColor(accent);
-                skinGlowPaint.setAlpha((int) (60 * alpha));
+                skinGlowPaint.setAlpha((int) (64 * alpha));
                 canvas.drawCircle(0, 0, radius, skinGlowPaint);
                 skinRingPaint.setStyle(Paint.Style.STROKE);
                 skinRingPaint.setStrokeWidth(dp(DeltamentBubbleSkins.ringWidth(skin)));
                 skinRingPaint.setColor(accent);
-                skinRingPaint.setAlpha((int) (220 * alpha));
+                skinRingPaint.setAlpha((int) (225 * alpha));
                 canvas.drawCircle(0, 0, radius - dp(1f), skinRingPaint);
             }
 
             particles.process();
             particles.draw(canvas, dark ? 0xFFFFFFFF : accent, alpha);
 
+            // Gift artwork, drawn after the glass so it sits inside the ball.
             if (imageReceiver != null) {
-                final float sz = dp(28);
+                final float sz = dp(30);
                 imageReceiver.setImageCoords(-sz / 2f, -sz / 2f, sz, sz);
                 imageReceiver.setAlpha(alpha);
                 imageReceiver.draw(canvas);
@@ -505,13 +582,89 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 canvas.drawText("\u2605", 0, -(fm.ascent + fm.descent) / 2f, bubbleGlyphPaint);
             }
 
-            // Tiny specular dot on the upper left, the detail that reads as glass.
+            // Specular: soft sheen on the glass surface plus a hard nucleus.
+            canvas.save();
+            canvas.translate(-radius * 0.34f, -radius * 0.42f);
+            canvas.rotate(-34f);
+            canvas.scale(1f, 0.66f);
             bubbleHighlightPaint.setStyle(Paint.Style.FILL);
+            bubbleHighlightPaint.setShader(sphereSpecularShader);
+            bubbleHighlightPaint.setAlpha((int) (0xFF * alpha));
+            canvas.drawCircle(0, 0, radius * 0.38f, bubbleHighlightPaint);
+            bubbleHighlightPaint.setShader(null);
+            canvas.restore();
+
             bubbleHighlightPaint.setColor(0xFFFFFFFF);
-            bubbleHighlightPaint.setAlpha((int) (0x66 * alpha));
-            canvas.drawCircle(-radius * 0.42f, -radius * 0.50f, radius * 0.045f, bubbleHighlightPaint);
+            bubbleHighlightPaint.setAlpha((int) (0xE0 * alpha));
+            canvas.drawCircle(-radius * 0.45f, -radius * 0.54f, radius * 0.055f, bubbleHighlightPaint);
+            bubbleHighlightPaint.setAlpha((int) (0x50 * alpha));
+            canvas.drawCircle(-radius * 0.40f, -radius * 0.50f, radius * 0.11f, bubbleHighlightPaint);
 
             canvas.restore();
+        }
+
+        private Shader sphereBodyShader, sphereInnerShader, sphereAOShader, sphereRimShader, sphereSpecularShader, sphereShadowShader;
+        private float sphereShaderRadius = -1f;
+        private int sphereShaderAccent;
+        private boolean sphereShaderDark;
+
+        /** Builds (and caches) the multi-layer shading used by the 3D bubble. */
+        private void ensureSphereShaders(float r, int accent, boolean dark) {
+            if (sphereBodyShader != null && Math.abs(sphereShaderRadius - r) < 0.5f
+                    && sphereShaderAccent == accent && sphereShaderDark == dark) {
+                return;
+            }
+            sphereShaderRadius = r;
+            sphereShaderAccent = accent;
+            sphereShaderDark = dark;
+
+            // Lit glass volume: hot core towards the light, saturated colour
+            // through the middle, thick dark glass on the far edge.
+            sphereBodyShader = new RadialGradient(
+                    -r * 0.34f, -r * 0.42f, r * 1.60f,
+                    new int[]{
+                            0x86FFFFFF,
+                            Theme.multAlpha(accent, dark ? 0.52f : 0.38f),
+                            Theme.multAlpha(accent, dark ? 0.28f : 0.18f),
+                            Theme.multAlpha(accent, dark ? 0.56f : 0.34f),
+                            dark ? 0x70000000 : 0x4A000000
+                    },
+                    new float[]{0f, 0.25f, 0.60f, 0.87f, 1f},
+                    Shader.TileMode.CLAMP
+            );
+            // Ambient occlusion around the whole rim.
+            sphereInnerShader = new RadialGradient(
+                    0, 0, r * 1.02f,
+                    new int[]{0x00000000, 0x00000000, dark ? 0x60000000 : 0x44000000},
+                    new float[]{0f, 0.62f, 1f},
+                    Shader.TileMode.CLAMP
+            );
+            // Extra shadow on the lower half, where the light does not reach.
+            sphereAOShader = new LinearGradient(
+                    0, -r * 0.15f, 0, r,
+                    new int[]{0x00000000, 0x00000000, dark ? 0x5E000000 : 0x3C000000},
+                    new float[]{0f, 0.42f, 1f},
+                    Shader.TileMode.CLAMP
+            );
+            // Rim light: bright towards the upper left, vanishing bottom right.
+            sphereRimShader = new LinearGradient(
+                    -r * 0.85f, -r, r * 0.85f, r,
+                    new int[]{0xFFFFFFFF, 0x7AFFFFFF, 0x14FFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.42f, 0.76f, 1f},
+                    Shader.TileMode.CLAMP
+            );
+            sphereSpecularShader = new RadialGradient(
+                    0, 0, r * 0.36f,
+                    new int[]{0xCCFFFFFF, 0x5AFFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.5f, 1f},
+                    Shader.TileMode.CLAMP
+            );
+            sphereShadowShader = new RadialGradient(
+                    0, 0, r * 1.24f,
+                    new int[]{dark ? 0x78000000 : 0x54000000, 0x1A000000, 0x00000000},
+                    new float[]{0f, 0.62f, 1f},
+                    Shader.TileMode.CLAMP
+            );
         }
     }
 
@@ -668,33 +821,53 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float barBottom = AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight();
         final float acx = realW > 0f ? realX + realW / 2f : getWidth() / 2f;
         final float acy = realH > 0f ? realY + realH / 2f : barBottom + dp(54);
+        final float viewBottom = Math.max(getHeight(), barBottom + dp(240));
 
-        // setExpandCoords() is only called from the header layout pass, so on
-        // the very first frames expandY can still be 0. Never let that hide the
-        // whole collection.
-        final float headerBottom = expandY > barBottom + dp(40)
-                ? expandY
-                : Math.max(realY + realH + dp(168), barBottom + dp(168));
-        final float closedAlpha = Utilities.clamp01((headerBottom - barBottom) / dp(50));
-        // Keep a small hint of the bubbles even in the expanded photo state,
-        // and never fade them out completely at rest.
-        final float visibility = closedAlpha * (1f - 0.85f * expandProgress) * (1f - actionBarProgress);
+        final float visibility = (1f - 0.92f * expandProgress) * (1f - actionBarProgress);
         if (visibility <= 0.001f) return;
 
         final float avatarSize = dp(ProfileActivity.isProfileV2Enabled() ? 108 : 96);
+        // Slots are stored as angle + distance around the avatar, so a moving
+        // avatar (parallax, pull-down) just drags the whole constellation with
+        // it instead of re-randomising the layout mid-gesture.
         if (positionsDirty || positionsWidth != getWidth() || positionsHeight != getHeight()
-                || Math.abs(positionsExpandY - headerBottom) > 0.5f
-                || Math.abs(positionsCx - acx) > dp(40) || Math.abs(positionsCy - acy) > dp(40)) {
-            computePositions(acx, acy, avatarSize, headerBottom);
+                || Math.abs(positionsExpandY - viewBottom) > 0.5f) {
+            computePositions(acx, acy, avatarSize, viewBottom);
         }
 
         lastAvatarWidth = avatarSize;
         lastAvatarHeight = avatarSize;
 
-        canvas.save();
-        canvas.clipRect(0, 0, getWidth(), headerBottom);
+        final long now = SystemClock.uptimeMillis();
+        final float dt = lastFrameTime == 0L ? 16f : Math.min(50f, Math.max(1f, now - lastFrameTime));
+        lastFrameTime = now;
 
-        final float t = (SystemClock.uptimeMillis() - animationsStart) / 1000f;
+        // Elastic follow of the dragged bubble: the sphere trails the finger a
+        // little instead of being glued to it.
+        if (draggingGift != null) {
+            final float follow = 1f - (float) Math.exp(-dt / 55f);
+            dragRenderX += (dragCx - dragRenderX) * follow;
+            dragRenderY += (dragCy - dragRenderY) * follow;
+            dragLift += (1.22f - dragLift) * (1f - (float) Math.exp(-dt / 70f));
+            final float targetStretch = Math.min(0.17f,
+                    (float) Math.hypot(dragVelX, dragVelY) / Math.max(0.01f, dpf2(4.2f)));
+            dragStretch += (targetStretch - dragStretch) * (1f - (float) Math.exp(-dt / 70f));
+            if (dragVelX * dragVelX + dragVelY * dragVelY > 0.0001f) {
+                dragStretchAngle = (float) Math.toDegrees(Math.atan2(dragVelY, dragVelX));
+            }
+        } else {
+            dragStretch *= (float) Math.exp(-dt / 90f);
+            dragLift += (1f - dragLift) * (1f - (float) Math.exp(-dt / 90f));
+        }
+
+        final float spinP = spinProgress(now);
+        final float spin = spinOffset(spinP);
+        final float gather = (float) Math.sin(spinP * Math.PI);
+
+        canvas.save();
+        canvas.clipRect(0, 0, getWidth(), viewBottom);
+
+        final float t = (now - animationsStart) / 1000f;
 
         for (int i = 0; i < gifts.size(); ++i) {
             final Gift gift = gifts.get(i);
@@ -704,26 +877,55 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             final float wiggle = (float) Math.sin((t / gift.wiggleDuration + phase * 1.7f) * Math.PI * 2.0) * 0.04f;
             final float glow = 0.8f + 0.2f * (float) Math.sin((t / gift.glowDuration + phase * 0.6f) * Math.PI * 2.0);
 
-            float gx = acx + (float) Math.cos(gift.orbitAngle) * gift.orbitDistance;
-            float gy = acy + (float) Math.sin(gift.orbitAngle) * gift.orbitDistance + hover;
+            float distance = gift.orbitDistance;
+            float scale = gift.orbitScale;
+            if (gather > 0.001f) {
+                // On a fast release every bubble is pulled towards a compact
+                // ring around the avatar before flying back to its slot.
+                final float ring = avatarSize * 0.5f * (1.9f + 0.72f * (i % 5) / 4f);
+                distance = lerp(distance, ring, 0.72f * gather);
+                scale *= 1f + 0.10f * gather;
+            }
+            final float angle = gift.orbitAngle + spin;
+
+            float gx = acx + (float) Math.cos(angle) * distance;
+            float gy = acy + (float) Math.sin(angle) * distance + hover;
             gift.baseCx = gx;
             gift.baseCy = gy;
 
+            // The user offset fades out while the bubbles spin around the
+            // avatar, so the whole collection forms one clean ring.
+            final float offsetFade = 1f - gather;
             final boolean hasOffset = (gift.offsetX != 0f || gift.offsetY != 0f)
                     && !Float.isNaN(gift.offsetX) && !Float.isInfinite(gift.offsetX)
                     && !Float.isNaN(gift.offsetY) && !Float.isInfinite(gift.offsetY);
             if (hasOffset) {
-                gx += gift.offsetX * avatarSize;
-                gy += gift.offsetY * avatarSize;
+                gx += gift.offsetX * avatarSize * offsetFade;
+                gy += gift.offsetY * avatarSize * offsetFade;
                 // Keep custom positions on-screen after rotation / resize.
                 gx = clamp(gx, dragPad(), Math.max(dragPad(), getWidth() - dragPad()));
-                gy = clamp(gy, dragPad(), Math.max(dragPad(), headerBottom - dragPad()));
+                gy = clamp(gy, dragPad(), Math.max(dragPad(), dragBottom() - dragPad()));
             }
 
             // Fly out of the avatar on first appearance, like the iOS cover.
             gx = lerp(acx, gx, enter);
             gy = lerp(acy, gy, enter);
-            final float scale = gift.orbitScale * lerp(0.2f, 1f, enter);
+            scale *= lerp(0.2f, 1f, enter);
+
+            if (gift != draggingGift && gift.settleStart != 0L) {
+                // Smooth glide from where the finger let go back into place,
+                // with a small overshoot of the lift scale.
+                final float sp = (now - gift.settleStart) / 280f;
+                if (sp >= 1f) {
+                    gift.settleStart = 0L;
+                } else {
+                    final float e = easeOutCubic(sp);
+                    gx = lerp(gift.settleFromX, gx, e);
+                    gy = lerp(gift.settleFromY, gy, e);
+                    scale *= 1f + (gift.settleFromScale - 1f) * (1f - e)
+                            + 0.06f * (float) Math.sin(sp * Math.PI) * (1f - sp);
+                }
+            }
 
             gift.lastCx = gx;
             gift.lastCy = gy;
@@ -731,11 +933,14 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (gift == draggingGift) {
                 continue;
             }
-            gift.draw(canvas, gx, gy, scale, wiggle, visibility * enter, glow);
+            gift.draw(canvas, gx, gy, scale, wiggle, visibility * enter, glow, 0f, 0f);
         }
 
         if (draggingGift != null) {
-            draggingGift.draw(canvas, dragCx, dragCy, 1.15f, 0f, 1f, 1.2f);
+            draggingGift.lastCx = dragRenderX;
+            draggingGift.lastCy = dragRenderY;
+            draggingGift.draw(canvas, dragRenderX, dragRenderY, dragLift, 0f, 1f, 1.2f,
+                    dragStretch, dragStretchAngle);
         }
 
         canvas.restore();
@@ -743,6 +948,32 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         if (isAttachedToWindow()) {
             postInvalidateOnAnimation();
         }
+    }
+
+    private static float easeOutCubic(float p) {
+        final float q = 1f - p;
+        return 1f - q * q * q;
+    }
+
+    /** Progress of the post-release spin, 0 when no spin is running. */
+    private float spinProgress(long now) {
+        if (flingSpinStart < 0L) {
+            return 0f;
+        }
+        final long elapsed = now - flingSpinStart;
+        if (elapsed >= flingSpinDuration) {
+            flingSpinStart = -1L;
+            return 0f;
+        }
+        return elapsed / (float) flingSpinDuration;
+    }
+
+    /** Eased spin offset; whole turns, so it lands exactly on the base layout. */
+    private float spinOffset(float progress) {
+        if (progress <= 0f) {
+            return 0f;
+        }
+        return flingSpinDir * flingSpinTurns * (float) (Math.PI * 2) * easeOutCubic(progress);
     }
 
     /**
@@ -759,14 +990,15 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
 
         final float w = Math.max(getWidth(), 1);
-        final float h = Math.max(headerBottom, dp(140));
+        final float h = Math.max(headerBottom, dp(240));
         final float radius = avatarSize / 2f;
-        final float item = dp(48);
-        final float pad = dp(5);
-        final float minDistance = dp(52);
+        final float item = dp(52);
+        final float pad = dp(6);
+        final float minDistance = dp(58);
 
         final float barTop = AndroidUtilities.statusBarHeight;
         final float barBottom = barTop + ActionBar.getCurrentActionBarHeight();
+        final float navTop = h - Math.max(AndroidUtilities.navigationBarHeight, dp(8)) - dp(4);
 
         final ArrayList<RectF> exclusions = new ArrayList<>();
         // Status bar plus the navigation buttons (gifts may float between them,
@@ -774,12 +1006,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         exclusions.add(new RectF(0, 0, w, barTop + dp(4)));
         exclusions.add(new RectF(dp(4), barTop, dp(60), barBottom));
         exclusions.add(new RectF(w - dp(150), barTop, w - dp(4), barBottom));
-        // Name and status under the avatar.
-        final float titleTop = acy + radius + dp(4);
-        final float titleWidth = Math.min(w - dp(24), dp(300));
-        exclusions.add(new RectF((w - titleWidth) / 2f, titleTop, (w + titleWidth) / 2f, titleTop + dp(64)));
-        // Action capsules (message / call ...) at the bottom of the header.
-        exclusions.add(new RectF(0, h - dp(78), w, h));
+        // The avatar itself.
+        exclusions.add(new RectF(acx - radius - dp(10), acy - radius - dp(10),
+                acx + radius + dp(10), acy + radius + dp(10)));
+        // Name, status and the action capsules under the avatar.
+        final float blockTop = acy + radius + dp(4);
+        final float blockWidth = Math.min(w - dp(16), dp(340));
+        final float blockBottom = Math.min(navTop - dp(4), blockTop + dp(126));
+        exclusions.add(new RectF((w - blockWidth) / 2f, blockTop, (w + blockWidth) / 2f, blockBottom));
+        // System navigation bar.
+        exclusions.add(new RectF(0, navTop, w, h));
 
         final float[] distances = new float[count];
         final float[] angles = new float[count];
@@ -789,7 +1025,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         int attempts = 0;
 
         final int innerCount = Math.min(4, count);
-        final float maxPossibleDistance = (float) Math.hypot(w, h) / 2f;
+        final float maxPossibleDistance = (float) Math.hypot(w, h);
 
         while (placed < innerCount && attempts < count * 250) {
             attempts++;
@@ -799,42 +1035,56 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                     + (float) Math.PI * bubbleRandom.nextFloat();
             final float px = acx + (float) Math.cos(angle) * distance;
             final float py = acy + (float) Math.sin(angle) * distance;
-            if (!isPositionFree(px, py, item, pad, w, h, exclusions, distances, angles, placed, acx, acy, minDistance)) {
+            if (!isPositionFree(px, py, item, pad, w, navTop, exclusions, distances, angles, placed, acx, acy, minDistance)) {
                 continue;
             }
             distances[placed] = distance;
             angles[placed] = angle;
-            scales[placed] = 0.85f + 0.18f * bubbleRandom.nextFloat();
+            scales[placed] = 0.88f + 0.17f * bubbleRandom.nextFloat();
             placed++;
             if (px < acx) left++; else right++;
         }
 
-        while (placed < count && attempts < count * 600) {
+        // Everything else is spread over the free space of the whole profile,
+        // mostly below the avatar and along both side margins.
+        while (placed < count && attempts < count * 900) {
             attempts++;
-            final boolean onLeft = right >= left;
-            final float distance = (2.5f + 1.1f * bubbleRandom.nextFloat()) * radius;
-            final float angle = (onLeft ? (float) Math.PI / 2f : -(float) Math.PI / 2f)
-                    + (float) Math.PI * bubbleRandom.nextFloat();
-            final float px = acx + (float) Math.cos(angle) * distance;
-            final float py = acy + (float) Math.sin(angle) * distance;
-            if (!isPositionFree(px, py, item, pad, w, h, exclusions, distances, angles, placed, acx, acy, minDistance)) {
+            final float usableTop = pad;
+            final float usableBottom = navTop - dp(4);
+            final float px, py;
+            if (bubbleRandom.nextFloat() < 0.68f) {
+                // Prefer the open area under the title/actions block.
+                final float regionTop = Math.min(usableBottom - item, blockBottom + dp(8));
+                px = pad + item / 2f + bubbleRandom.nextFloat() * Math.max(1f, w - item - 2f * pad);
+                py = regionTop + item / 2f + bubbleRandom.nextFloat()
+                        * Math.max(1f, usableBottom - regionTop - item);
+            } else {
+                px = pad + item / 2f + bubbleRandom.nextFloat() * Math.max(1f, w - item - 2f * pad);
+                py = usableTop + item / 2f + bubbleRandom.nextFloat()
+                        * Math.max(1f, usableBottom - usableTop - item);
+            }
+            if (!isPositionFree(px, py, item, pad, w, navTop, exclusions, distances, angles, placed, acx, acy, minDistance)) {
                 continue;
             }
-            distances[placed] = distance;
-            angles[placed] = angle;
-            scales[placed] = 1.05f - Math.min(1f, distance / Math.max(1f, maxPossibleDistance)) * 0.16f;
+            final float dx = px - acx, dy = py - acy;
+            final float dist = (float) Math.hypot(dx, dy);
+            distances[placed] = dist;
+            angles[placed] = (float) Math.atan2(dy, dx);
+            scales[placed] = Math.max(0.72f, 1.02f - Math.min(1f, dist / Math.max(1f, maxPossibleDistance)) * 0.26f);
             placed++;
             if (px < acx) left++; else right++;
         }
 
-        // Fallback for very narrow covers: spread the remaining bubbles on the
-        // sides / lower half, never over the action bar.
-        int guard = 0;
-        while (placed < count && guard++ < count * 4) {
-            final float angle = (float) (Math.PI * (placed + 0.5f) / Math.max(1, count));
-            distances[placed] = radius * 1.75f;
-            angles[placed] = angle;
-            scales[placed] = 0.9f;
+        // Last-resort fallback: a column at the edges, never over the bars.
+        while (placed < count) {
+            final boolean rightSide = placed % 2 == 0;
+            final float px = rightSide ? w - pad - item / 2f : pad + item / 2f;
+            final float py = Math.min(navTop - pad - item / 2f,
+                    blockBottom + dp(20) + (placed / 2) * (item + dp(8)));
+            final float dx = px - acx, dy = py - acy;
+            distances[placed] = (float) Math.hypot(dx, dy);
+            angles[placed] = (float) Math.atan2(dy, dx);
+            scales[placed] = 0.82f;
             placed++;
         }
 
@@ -902,6 +1152,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             pressedGift = hit;
             downX = event.getX();
             downY = event.getY();
+            lastMoveX = downX;
+            lastMoveY = downY;
+            lastMoveTime = event.getEventTime();
+            dragVelX = dragVelY = 0f;
+            if (velocityTracker == null) {
+                velocityTracker = VelocityTracker.obtain();
+            } else {
+                velocityTracker.clear();
+            }
+            velocityTracker.addMovement(event);
             if (pressedGift != null) {
                 pressedGift.bounce.setPressed(true);
                 if (canDrag) {
@@ -913,12 +1173,35 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             return pressedGift != null;
         }
 
+        if (velocityTracker != null) {
+            velocityTracker.addMovement(event);
+        }
+
         if (draggingGift != null) {
             if (action == MotionEvent.ACTION_MOVE) {
-                dragCx = clamp(event.getX() + dragTouchOffsetX, dragPad(), getWidth() - dragPad());
-                dragCy = clamp(event.getY() + dragTouchOffsetY, dragPad(), Math.max(dragPad(), headerBottomForDrag() - dragPad()));
+                final long eventTime = event.getEventTime();
+                final float moveDt = Math.max(1f, eventTime - lastMoveTime);
+                dragVelX = lerp(dragVelX, (event.getX() - lastMoveX) / moveDt, 0.45f);
+                dragVelY = lerp(dragVelY, (event.getY() - lastMoveY) / moveDt, 0.45f);
+                lastMoveX = event.getX();
+                lastMoveY = event.getY();
+                lastMoveTime = eventTime;
+                dragCx = clamp(event.getX() + dragTouchOffsetX, dragPad(), Math.max(dragPad(), getWidth() - dragPad()));
+                dragCy = clamp(event.getY() + dragTouchOffsetY, dragPad(), Math.max(dragPad(), dragBottom() - dragPad()));
+                // Some parents intercept the first MOVE even after the initial
+                // request, so keep asking while the bubble is being dragged.
+                final ViewParent parent = getParent();
+                if (parent != null) {
+                    parent.requestDisallowInterceptTouchEvent(true);
+                }
                 invalidate();
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                if (velocityTracker != null) {
+                    velocityTracker.computeCurrentVelocity(1000);
+                    lastVelocityX = velocityTracker.getXVelocity();
+                    lastVelocityY = velocityTracker.getYVelocity();
+                }
+                releaseVelocityTracker();
                 finishDrag(action == MotionEvent.ACTION_UP);
             }
             return true;
@@ -942,12 +1225,14 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 pressedGift.bounce.setPressed(false);
                 pressedGift = null;
             }
+            releaseVelocityTracker();
         } else if (action == MotionEvent.ACTION_CANCEL) {
             cancelDragLongPress();
             if (pressedGift != null) {
                 pressedGift.bounce.setPressed(false);
                 pressedGift = null;
             }
+            releaseVelocityTracker();
         }
         return pressedGift != null;
     }
@@ -961,10 +1246,22 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         pressedGift = null;
         draggingGift = gift;
         gift.bounce.setPressed(false);
+        gift.settleStart = 0L;
         dragCx = gift.lastCx;
         dragCy = gift.lastCy;
+        dragRenderX = dragCx;
+        dragRenderY = dragCy;
+        dragLift = 1f;
+        dragStretch = 0f;
+        dragVelX = dragVelY = 0f;
+        lastMoveX = downX;
+        lastMoveY = downY;
+        lastMoveTime = SystemClock.uptimeMillis();
         dragTouchOffsetX = dragCx - downX;
         dragTouchOffsetY = dragCy - downY;
+        if (velocityTracker != null) {
+            velocityTracker.clear();
+        }
         final ViewParent parent = getParent();
         if (parent != null) {
             parent.requestDisallowInterceptTouchEvent(true);
@@ -981,17 +1278,48 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             parent.requestDisallowInterceptTouchEvent(false);
         }
         if (gift != null && apply) {
+            final long now = SystemClock.uptimeMillis();
             if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
                 final float nx = (dragCx - gift.baseCx) / lastAvatarWidth;
                 final float ny = (dragCy - gift.baseCy) / lastAvatarHeight;
                 if (!Float.isNaN(nx) && !Float.isInfinite(nx) && !Float.isNaN(ny) && !Float.isInfinite(ny)) {
-                    gift.offsetX = Math.max(-2f, Math.min(2f, nx));
-                    gift.offsetY = Math.max(-2f, Math.min(2f, ny));
+                    gift.offsetX = clamp(nx, -6f, 6f);
+                    gift.offsetY = clamp(ny, -6f, 6f);
                     savePosition(gift);
                 }
             }
+            // Glide from the render position (which lags the finger) back into
+            // the saved slot.
+            gift.settleStart = now;
+            gift.settleFromX = dragRenderX;
+            gift.settleFromY = dragRenderY;
+            gift.settleFromScale = dragLift;
+
+            final float speed = (float) Math.hypot(lastVelocityX, lastVelocityY);
+            if (speed > dp(600)) {
+                startFlingSpin(speed, lastVelocityX, lastVelocityY);
+            }
         }
+        lastVelocityX = lastVelocityY = 0f;
         invalidate();
+    }
+
+    /** Fast release: all bubbles gather around the avatar and orbit it. */
+    private void startFlingSpin(float speed, float vx, float vy) {
+        flingSpinStart = SystemClock.uptimeMillis();
+        flingSpinDuration = 2800L;
+        flingSpinTurns = speed > dp(2600) ? 3 : (speed > dp(1400) ? 2 : 1);
+        final float direction = Math.abs(vx) > dp(120) ? vx : vy;
+        flingSpinDir = direction >= 0f ? 1 : -1;
+        performHapticFeedback(HapticFeedbackConstants.VIBRATE);
+        invalidate();
+    }
+
+    private void releaseVelocityTracker() {
+        if (velocityTracker != null) {
+            velocityTracker.recycle();
+            velocityTracker = null;
+        }
     }
 
     private void cancelDragLongPress() {
@@ -1005,10 +1333,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         return dpf2(24);
     }
 
-    /** Bottom of the header area, even before setExpandCoords() has run. */
-    private float headerBottomForDrag() {
-        final float barBottom = AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight();
-        return expandY > barBottom + dp(40) ? expandY : Math.max(getHeight(), barBottom + dp(168));
+    /** Lowest y a dragged bubble may reach (above the system navigation bar). */
+    private float dragBottom() {
+        final float nav = Math.max(AndroidUtilities.navigationBarHeight, dp(8));
+        return Math.max(dp(200), getHeight() - nav);
     }
 
     private static float clamp(float value, float min, float max) {
