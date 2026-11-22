@@ -802,3 +802,21 @@ func (a *API) getFramesRegistry(w http.ResponseWriter, r *http.Request) {
 		"frames":  out,
 	})
 }
+
+func (a *API) getVerificationRegistry(w http.ResponseWriter, r *http.Request) {
+	if a.Frames == nil {
+		writeJSON(w, 200, map[string]any{"icons": map[string]int64{}})
+		return
+	}
+	icons, err := a.Frames.VerificationIcons(r.Context())
+	if err != nil {
+		writeErr(w, a.Log, err)
+		return
+	}
+	out := make(map[string]int64, len(icons))
+	for userID, icon := range icons {
+		out[strconv.FormatInt(userID, 10)] = icon
+	}
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	writeJSON(w, 200, map[string]any{"icons": out})
+}

@@ -115,6 +115,7 @@ type Deps struct {
 // cosmetic user ids plus frame ids.
 type Frames interface {
 	AvatarFrames(ctx context.Context) (map[int64]string, error)
+	VerificationIcons(ctx context.Context) (map[int64]int64, error)
 }
 
 // Banners serves profile banners: the registry is public, uploads are not.
@@ -180,6 +181,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/domains/list", a.nativeAuth(a.domainList))
 	mux.HandleFunc("POST /api/domains/unlist", a.nativeAuth(a.domainUnlist))
 	mux.HandleFunc("GET /api/frames/registry", a.getFramesRegistry)
+	mux.HandleFunc("GET /api/verifications/registry", a.getVerificationRegistry)
 	mux.HandleFunc("GET /api/banners/registry", a.getBannerRegistry)
 	mux.HandleFunc("GET /api/banners/{id}", a.getBanner)
 
