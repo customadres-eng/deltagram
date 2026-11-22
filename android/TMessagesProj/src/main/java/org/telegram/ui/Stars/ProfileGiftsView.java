@@ -493,12 +493,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
             // Contact shadow: the ball floats a few pixels above the surface.
             canvas.save();
-            canvas.translate(radius * 0.04f, radius * 0.46f);
-            canvas.scale(1.02f, 0.46f);
+            canvas.translate(radius * 0.05f, radius * 0.62f);
+            canvas.scale(1.0f, 0.42f);
             bubbleFillPaint.setStyle(Paint.Style.FILL);
             bubbleFillPaint.setShader(sphereShadowShader);
-            bubbleFillPaint.setAlpha((int) (0xC4 * alpha));
-            canvas.drawCircle(0, 0, radius * 1.20f, bubbleFillPaint);
+            bubbleFillPaint.setAlpha((int) (0xB8 * alpha));
+            canvas.drawCircle(0, 0, radius * 1.16f, bubbleFillPaint);
             canvas.restore();
 
             // Glass body: a coloured volume lit from the upper left.
@@ -1024,7 +1024,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         int left = 0, right = 0;
         int attempts = 0;
 
-        final int innerCount = Math.min(4, count);
+        // Only the closest bubbles hug the avatar, the rest is spread over the
+        // whole profile (see the scatter loop below).
+        final int innerCount = Math.min(3, count);
         final float maxPossibleDistance = (float) Math.hypot(w, h);
 
         while (placed < innerCount && attempts < count * 250) {
@@ -1156,21 +1158,22 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             lastMoveY = downY;
             lastMoveTime = event.getEventTime();
             dragVelX = dragVelY = 0f;
+            if (pressedGift == null) {
+                return false;
+            }
             if (velocityTracker == null) {
                 velocityTracker = VelocityTracker.obtain();
             } else {
                 velocityTracker.clear();
             }
             velocityTracker.addMovement(event);
-            if (pressedGift != null) {
-                pressedGift.bounce.setPressed(true);
-                if (canDrag) {
-                    dragLongPressPosted = true;
-                    removeCallbacks(dragLongPressRunnable);
-                    postDelayed(dragLongPressRunnable, DRAG_LONG_PRESS_MS);
-                }
+            pressedGift.bounce.setPressed(true);
+            if (canDrag) {
+                dragLongPressPosted = true;
+                removeCallbacks(dragLongPressRunnable);
+                postDelayed(dragLongPressRunnable, DRAG_LONG_PRESS_MS);
             }
-            return pressedGift != null;
+            return true;
         }
 
         if (velocityTracker != null) {
