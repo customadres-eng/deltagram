@@ -3698,7 +3698,9 @@ public class WalletActivity extends UniversalFragment implements NotificationCen
                 items.add(TransactionCell.Factory.of(transactionsList.allTransactions.get(i), transactionsList.addressFormatter));
             }
         }
-        if (transactionsList != null && (transactionsList.isLoading() || !transactionsList.hasEndReached())) {
+        // The DeltaGram card shows its real TON/Stars ledger above. Do not
+        // leave an indefinite placeholder in the legacy wallet transaction tab.
+        if (moneyCards == null && transactionsList != null && (transactionsList.isLoading() || !transactionsList.hasEndReached())) {
             items.add(UItem.asFlicker(-1, FlickerLoadingView.WALLET_TRANSACTION));
             items.add(UItem.asFlicker(-2, FlickerLoadingView.WALLET_TRANSACTION));
             items.add(UItem.asFlicker(-3, FlickerLoadingView.WALLET_TRANSACTION));

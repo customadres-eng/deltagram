@@ -48,6 +48,13 @@ func (c *Cards) Registry(ctx context.Context) ([]domain.CardPublic, error) {
 	return c.db.CardRegistry(ctx)
 }
 
+func (c *Cards) History(ctx context.Context, userID int64) ([]domain.CardHistoryEntry, error) {
+	if userID <= 0 {
+		return nil, domain.ErrUnauthorized
+	}
+	return c.db.CardHistory(ctx, userID)
+}
+
 func (c *Cards) Prefs(ctx context.Context, userID int64) (domain.CardPrefs, error) {
 	p, err := c.db.CardPrefs(ctx, userID)
 	if errors.Is(err, domain.ErrNotFound) {
@@ -139,11 +146,19 @@ func (c *Cards) Send(ctx context.Context, fromUserID int64, toUsername, kind str
 		if amount < 10_000_000 {
 			return domain.CardPublic{}, fmt.Errorf("%w: minimum is 0.01 TON", domain.ErrInvalid)
 		}
+		sender, err := c.cardOf(ctx, fromUserID)
+		if err != nil {
+			return domain.CardPublic{}, err
+		}
+		senderName := sender.Username
+		if senderName == "" {
+			senderName = fmt.Sprint(fromUserID)
+		}
 		err = c.db.InTx(ctx, func(tx store.Tx) error {
 			if err := tx.DebitTON(ctx, fromUserID, amount, "card_send", "Перевод TON пользователю @"+strings.TrimPrefix(toUsername, "@")); err != nil {
 				return err
 			}
-			return tx.CreditTON(ctx, toUserID, amount, "card_receive", "Перевод TON от пользователя")
+			return tx.CreditTON(ctx, toUserID, amount, "card_receive", "Перевод TON от @"+senderName)
 		})
 	case "stars":
 		if amount < 1 {

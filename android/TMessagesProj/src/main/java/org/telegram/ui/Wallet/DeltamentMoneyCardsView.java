@@ -5,6 +5,7 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -34,6 +35,11 @@ import org.telegram.ui.Components.QRCodeBottomSheet;
 import org.telegram.ui.Stars.StarsController;
 import org.telegram.ui.Stars.StarsIntroActivity;
 import org.telegram.ui.TON.TONIntroActivity;
+import org.telegram.ui.ProfileActivity;
+
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.List;
 
 /**
  * The two real Telegram wallet cards on the DeltaGram Money screen. The blue
@@ -50,6 +56,8 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
     private final LinearLayout dots;
     private final TextView action;
     private TextView currencyView;
+    private final LinearLayout historyRows;
+    private List<DeltagramCards.CardTransaction> history;
     private final View[] dotViews = new View[2];
 
     private final WalletCardComponent tonCard;
@@ -143,6 +151,16 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         addView(createCardSettingsRow(context), LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, 64, 20, 8, 20, 0));
         addView(createDomainsRow(context), LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, 64, 20, 8, 20, 0));
 
+        TextView historyTitle = new TextView(context);
+        historyTitle.setText("История карты");
+        historyTitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        historyTitle.setTypeface(AndroidUtilities.bold());
+        historyTitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        addView(historyTitle, LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, 20, 18, 20, 8));
+        historyRows = new LinearLayout(context);
+        historyRows.setOrientation(VERTICAL);
+        addView(historyRows, LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, 20, 0, 20, 0));
+
         updateBalances();
         updateActive(0);
     }
@@ -194,6 +212,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
             StarsController.getTonInstance(currentAccount).invalidateBalance();
             StarsController.getInstance(currentAccount).invalidateBalance();
             updateBalances();
+            refreshHistory();
         }));
     }
 
@@ -315,6 +334,78 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         action.setTextColor(ton ? Color.WHITE : 0xff2a1a03);
         action.setBackground(rounded(ton ? TON_ACCENT : STAR_ACCENT, dp(24)));
         updateDots(active);
+        if (historyRows != null) renderHistory();
+    }
+
+    private void refreshHistory() {
+        DeltagramCards.history(currentAccount, (entries, error) -> {
+            if (!isAttachedToWindow()) return;
+            history = entries;
+            renderHistory();
+            if (error != null) {
+                historyRows.removeAllViews();
+                TextView message = new TextView(getContext());
+                message.setText("Не удалось загрузить историю. Нажмите, чтобы повторить.");
+                message.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+                message.setOnClickListener(v -> refreshHistory());
+                historyRows.addView(message, LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, 44));
+            }
+        });
+    }
+
+    private void renderHistory() {
+        historyRows.removeAllViews();
+        int count = 0;
+        if (history != null) for (DeltagramCards.CardTransaction entry : history) {
+            if (!entry.kind.equals(active == 0 ? "ton" : "stars")) continue;
+            count++;
+            LinearLayout row = new LinearLayout(getContext());
+            row.setOrientation(HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(8), dp(12), dp(8));
+            row.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 3));
+
+            LinearLayout details = new LinearLayout(getContext());
+            details.setOrientation(VERTICAL);
+            TextView name = new TextView(getContext());
+            String label = !TextUtils.isEmpty(entry.peerName) ? entry.peerName
+                    : !TextUtils.isEmpty(entry.peerUsername) ? "@" + entry.peerUsername
+                    : !TextUtils.isEmpty(entry.title) ? entry.title : entry.reason;
+            name.setText(label);
+            name.setSingleLine(true);
+            name.setEllipsize(TextUtils.TruncateAt.END);
+            name.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            name.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            details.addView(name);
+            TextView date = new TextView(getContext());
+            date.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(entry.created)));
+            date.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            date.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+            details.addView(date);
+            row.addView(details, new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
+
+            TextView amount = new TextView(getContext());
+            String value = active == 0 ? WalletCardComponent.formatGrams(Math.abs(entry.amount)) + " GRAM"
+                    : WalletCardComponent.formatStars(Math.abs(entry.amount)) + " ★";
+            amount.setText((entry.amount > 0 ? "+" : "−") + value);
+            amount.setTextColor(entry.amount > 0 ? 0xff34b771 : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            amount.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            row.addView(amount);
+            if (entry.peerId > 0 && parent != null) {
+                row.setOnClickListener(v -> {
+                    Bundle args = new Bundle();
+                    args.putLong("user_id", entry.peerId);
+                    parent.presentFragment(new ProfileActivity(args));
+                });
+            }
+            historyRows.addView(row, LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        }
+        if (count == 0) {
+            TextView empty = new TextView(getContext());
+            empty.setText(history == null ? "История недоступна" : "Пока нет транзакций");
+            empty.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+            historyRows.addView(empty, LayoutHelper.createLinear(LayoutParams.MATCH_PARENT, 44));
+        }
     }
 
     public void updateBalances() {
@@ -370,6 +461,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.walletUpdate);
         DeltagramCards.addListener(cardRegistryListener);
         DeltagramCards.refreshRegistry(currentAccount);
+        refreshHistory();
         try {
             StarsController.getTonInstance(currentAccount).invalidateBalance();
             StarsController.getInstance(currentAccount).invalidateBalance();

@@ -18,6 +18,20 @@ func (a *API) cardRegistry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"cards": list})
 }
 
+func (a *API) cardHistory(w http.ResponseWriter, r *http.Request) {
+	userID := nativeUser(r)
+	if userID <= 0 {
+		writeErr(w, a.Log, domain.ErrUnauthorized)
+		return
+	}
+	entries, err := a.Cards.History(r.Context(), userID)
+	if err != nil {
+		writeErr(w, a.Log, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"entries": entries})
+}
+
 func (a *API) cardPrefs(w http.ResponseWriter, r *http.Request) {
 	userID := domainUser(r)
 	if userID <= 0 {

@@ -120,3 +120,63 @@ func (db *DB) ResolveUsername(ctx context.Context, username string) (int64, erro
 		LIMIT 1`, username).Scan(&id)
 	return id, wrap(err)
 }
+
+// CardHistory joins the actual TON ledger and messenger Stars ledger. The
+// latter includes a peer for transfers where the main server recorded one.
+func (db *DB) CardHistory(ctx context.Context, userID int64) ([]domain.CardHistoryEntry, error) {
+	rows, err := db.q.Query(ctx, `
+		SELECT h.id, h.kind, h.amount, h.reason, h.title, h.created,
+		       h.peer_id, h.peer_name, h.peer_username
+		FROM (
+			SELECT t.id, 'ton'::text AS kind, t.amount, t.reason,
+			       t.asset AS title,
+			       (extract(epoch FROM t.created_at) * 1000)::bigint AS created,
+			       COALESCE(p.id, 0)::bigint AS peer_id,
+			       COALESCE(NULLIF(TRIM(p.first_name || ' ' || p.last_name), ''), '')::text AS peer_name,
+			       COALESCE(p.username, '')::text AS peer_username
+			FROM (SELECT id, amount, reason, asset, created_at
+			      FROM deltament_balance_transactions
+			      WHERE user_id = $1 AND currency = 'TON'
+			      ORDER BY id DESC LIMIT 50) t
+			LEFT JOIN LATERAL (
+				SELECT u.id, u.first_name, u.last_name, u.username
+				FROM users u
+				WHERE u.deleted_at IS NULL AND t.reason IN ('card_send', 'card_receive')
+				  AND (
+					lower(u.username) = lower(split_part(t.asset, '@', 2))
+					OR EXISTS (SELECT 1 FROM peer_usernames pn
+					           WHERE pn.peer_type = 'user' AND pn.peer_id = u.id
+					             AND pn.active AND pn.username_lower = lower(split_part(t.asset, '@', 2)))
+					OR EXISTS (SELECT 1 FROM collectible_usernames cn
+					           WHERE cn.owner_peer_type = 'user' AND cn.owner_peer_id = u.id
+					             AND cn.status <> 'burned'
+					             AND cn.username_lower = lower(split_part(t.asset, '@', 2)))
+				  )
+				LIMIT 1
+			) p ON TRUE
+			UNION ALL
+			SELECT s.id, 'stars'::text, s.amount, s.reason, s.title,
+			       s.date::bigint * 1000, COALESCE(p.id, 0),
+			       COALESCE(NULLIF(TRIM(p.first_name || ' ' || p.last_name), ''), ''),
+			       COALESCE(p.username, '')
+			FROM (SELECT id, amount, reason, title, date, peer_type, peer_id
+			      FROM stars_transactions WHERE user_id = $1
+			      ORDER BY id DESC LIMIT 50) s
+			LEFT JOIN users p ON s.peer_type = 'user' AND s.peer_id = p.id
+		) h
+		ORDER BY h.created DESC, h.id DESC LIMIT 50`, userID)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	defer rows.Close()
+	out := make([]domain.CardHistoryEntry, 0)
+	for rows.Next() {
+		var entry domain.CardHistoryEntry
+		if err := rows.Scan(&entry.ID, &entry.Kind, &entry.Amount, &entry.Reason,
+			&entry.Title, &entry.Created, &entry.PeerID, &entry.PeerName, &entry.PeerUsername); err != nil {
+			return nil, wrap(err)
+		}
+		out = append(out, entry)
+	}
+	return out, wrap(rows.Err())
+}
