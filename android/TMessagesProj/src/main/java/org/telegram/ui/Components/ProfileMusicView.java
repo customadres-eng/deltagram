@@ -274,6 +274,14 @@ public class ProfileMusicView extends View {
         return parentExpanded >= 0.8f;
     }
 
+    /**
+     * Subclasses that render their own content (the balances pill) do not use
+     * the song author/title fields, so they opt out of the null guard below.
+     */
+    protected boolean hasTextContent() {
+        return author != null && title != null;
+    }
+
     public void updatePosition(float y, float newHeight) {
         if (trailingView != null) trailingView.updatePosition(y, newHeight);
         currentHeight = newHeight;
@@ -338,7 +346,7 @@ public class ProfileMusicView extends View {
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
-        if (this.author == null || this.title == null) return;
+        if (!hasTextContent()) return;
 
         final float alpha = Utilities.clamp01((currentHeight) / dp(21));
         final float scale = bounce.getScale(0.02f);

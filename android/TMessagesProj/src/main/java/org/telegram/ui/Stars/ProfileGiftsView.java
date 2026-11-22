@@ -9,10 +9,8 @@ import android.animation.TimeInterpolator;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
-import android.os.SystemClock;
 import android.graphics.Matrix;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -160,7 +158,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         for (Gift gift : gifts) {
             gift.emojiDrawable.addView(this);
-            if (gift.patternDrawable != null) gift.patternDrawable.attach();
         }
 
         update();
@@ -177,7 +174,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         for (Gift gift : gifts) {
             gift.emojiDrawable.removeView(this);
-            if (gift.patternDrawable != null) gift.patternDrawable.detach();
         }
     }
 
@@ -256,14 +252,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             color = backdrop.center_color | 0xFF000000;
             slug = gift.slug;
             initParticles();
-            final TL_stars.starGiftAttributePattern pattern = findAttribute(gift.attributes, TL_stars.starGiftAttributePattern.class);
-            if (pattern != null) {
-                patternAttr = pattern;
-                patternColor = backdrop.pattern_color | 0xFF000000;
-                patternDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(ProfileGiftsView.this, dp(28));
-                patternDrawable.set(pattern.document, false);
-                patternDrawable.setColor(patternColor);
-            }
         }
 
         public Gift(TLRPC.TL_emojiStatusCollectible status) {
@@ -275,39 +263,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             initParticles();
         }
 
-        /** Per-gift drift parameters, derived from the gift id so every bubble moves its own way. */
-        public float floatPx, floatPy, floatSx, floatSy, tilt;
-        public float bubbleBaseDp, depthPhase, depthSpeed;
-        public int patternColor = 0xFFFFFFFF;
-        public TL_stars.starGiftAttributePattern patternAttr;
-        public AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable patternDrawable;
-        public float bubbleShaderR;
-        public RadialGradient bubbleShader;
-        public float innerShadowR;
-        public RadialGradient innerShadow;
-
-        /**
-         * Bubbles live at different "depths": each one slowly grows and shrinks,
-         * so from time to time a single large bubble floats in front of the
-         * name, like in the iOS 13.3 profile.
-         */
-        public float bubbleRadius() {
-            final float t = SystemClock.uptimeMillis() / 1000f;
-            final float focus = 0.5f + 0.5f * (float) Math.sin(t * depthSpeed + depthPhase);
-            final float breathe = 1f + 0.03f * (float) Math.sin(t * 0.9f + floatPx);
-            return dp(bubbleBaseDp) * (0.82f + 0.55f * focus) * breathe;
-        }
-
         private void initParticles() {
-            final java.util.Random rnd = new java.util.Random(id);
-            floatPx = rnd.nextFloat() * 6.2832f;
-            floatPy = rnd.nextFloat() * 6.2832f;
-            floatSx = 0.16f + rnd.nextFloat() * 0.16f;
-            floatSy = 0.22f + rnd.nextFloat() * 0.18f;
-            tilt = (rnd.nextFloat() - 0.5f) * 34f;
-            bubbleBaseDp = 34 + rnd.nextInt(5) * 10;
-            depthPhase = rnd.nextFloat() * 6.2832f;
-            depthSpeed = 0.12f + rnd.nextFloat() * 0.14f;
             particles = new StarsReactionsSheet.Particles(StarsReactionsSheet.Particles.TYPE_RADIAL, 6);
             final float gsz = dp(36);
             particles.bounds.set(-gsz / 2.0f, -gsz / 2.0f, gsz / 2.0f, gsz / 2.0f);
@@ -498,10 +454,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 g.emojiDrawable.removeView(this);
                 g.emojiDrawable = null;
                 g.gradient = null;
-                if (g.patternDrawable != null) {
-                    g.patternDrawable.detach();
-                    g.patternDrawable = null;
-                }
             } else {
                 positions.remove((Object) g.position);
             }
@@ -517,13 +469,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             }
         }
 
-        if (isAttachedToWindow()) {
-            for (int i = 0; i < gifts.size(); ++i) {
-                final Gift g = gifts.get(i);
-                if (g.patternDrawable != null) g.patternDrawable.attach();
-            }
-        }
-
         if (changed)
             invalidate();
     }
@@ -534,14 +479,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         if (gifts.isEmpty() || expandProgress >= 1.0f || collapseProgress <= 0f) return;
-        if (ProfileActivity.isProfileV2Enabled()) {
-            postInvalidateOnAnimation();
-            // Bigger (closer) bubbles are drawn last, so they cover the name just
-            // like the foreground sphere in the iOS design.
-            if (gifts.size() > 1) {
-                gifts.sort((a, b) -> Float.compare(a.bubbleRadius(), b.bubbleRadius()));
-            }
-        }
 
         final float realX = avatarContainer.getX();
         final float realY = avatarContainer.getY();
@@ -582,54 +519,37 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             float gx, gy;
             float delayValue;
 
-            final boolean bubbles = ProfileActivity.isProfileV2Enabled();
-            final float bubbleR = bubbles ? gift.bubbleRadius() : 0f;
-            if (bubbles) {
-                // Profile v2: pinned gifts are glass spheres drifting over the
-                // upper part of the photo. Each one follows its own slow
-                // Lissajous path, so they wander instead of sitting on a ring.
-                final float t = SystemClock.uptimeMillis() / 1000f;
-                final float rangeX = Math.max(0, aw * 0.55f - bubbleR);
-                final float rangeY = Math.max(0, ah * 0.22f);
-                final float ox = (float) Math.sin(t * gift.floatSx + gift.floatPx) * rangeX
-                        + (float) Math.sin(t * gift.floatSx * 0.41f + gift.floatPx * 2f) * rangeX * 0.3f;
-                final float oy = (float) Math.sin(t * gift.floatSy + gift.floatPy) * rangeY;
-                gx = clamp(acx + ox, bubbleR, Math.max(bubbleR, getWidth() - bubbleR));
-                gy = clamp(ay + ah * 0.30f + oy, bubbleR, Math.max(bubbleR, ay + ah * 0.55f));
-                delayValue = 0.5f;
-            } else {
-                switch (gift.position) {
-                    case 0: // left
-                        gx = acx / 2f - (dp(20) * expandScale);
-                        gy = acy - dp(13);
-                        delayValue = 1.6f;
-                        break;
-                    case 1: // top left
-                        gx = acx * 2f / 3f - (dp(6) * expandScale);
-                        gy = ay - dp(4);
-                        delayValue = 0;
-                        break;
-                    case 2: // bottom left
-                        gx = acx * 2f / 3f - (dp(12) * expandScale);
-                        gy = ay + ah - dp(16);
-                        delayValue = 0.9f;
-                        break;
-                    case 3: // right
-                        gx = acx * 1.5f + (dp(20) * expandScale);
-                        gy = acy - dp(13);
-                        delayValue = 1.6f;
-                        break;
-                    case 4: // top right
-                        gx = acx * 4f / 3f + (dp(12) * expandScale);
-                        gy = ay - dp(4);
-                        delayValue = 0.9f;
-                        break;
-                    default: // bottom right
-                        gx = acx * 4f / 3f + (dp(12) * expandScale);
-                        gy = ay + ah - dp(16);
-                        delayValue = 0;
-                        break;
-                }
+            switch (gift.position) {
+                case 0: // left
+                    gx = acx / 2f - (dp(20) * expandScale);
+                    gy = acy - dp(13);
+                    delayValue = 1.6f;
+                    break;
+                case 1: // top left
+                    gx = acx * 2f / 3f - (dp(6) * expandScale);
+                    gy = ay - dp(4);
+                    delayValue = 0;
+                    break;
+                case 2: // bottom left
+                    gx = acx * 2f / 3f - (dp(12) * expandScale);
+                    gy = ay + ah - dp(16);
+                    delayValue = 0.9f;
+                    break;
+                case 3: // right
+                    gx = acx * 1.5f + (dp(20) * expandScale);
+                    gy = acy - dp(13);
+                    delayValue = 1.6f;
+                    break;
+                case 4: // top right
+                    gx = acx * 4f / 3f + (dp(12) * expandScale);
+                    gy = ay - dp(4);
+                    delayValue = 0.9f;
+                    break;
+                default: // bottom right
+                    gx = acx * 4f / 3f + (dp(12) * expandScale);
+                    gy = ay + ah - dp(16);
+                    delayValue = 0;
+                    break;
             }
 
             final float collapseProgressWithEnter;
@@ -671,111 +591,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (gift == draggingGift) {
                 continue;
             }
-            if (bubbles) {
-                final float rr = gift.bubbleRadius() * scale;
-                final float tilt = gift.tilt + 5f * (float) Math.sin(SystemClock.uptimeMillis() / 2600f + gift.floatPx);
-                drawBubble(canvas, gift, gx, gy, rr, alpha, tilt);
-                gift.bounds.set(gx - rr, gy - rr, gx + rr, gy + rr);
-            } else {
-                gift.draw(canvas, gx, gy, scale, 0, alpha, 1f);
-            }
+            gift.draw(canvas, gx, gy, scale, 0, alpha, 1f);
         }
 
         if (draggingGift != null) {
             draggingGift.draw(canvas, dragCx, dragCy, 1.15f, 0, 1f, 1f);
         }
-
-        canvas.restore();
-    }
-
-    private final Paint bubbleFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint bubbleRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint bubbleGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final RectF bubbleArcRect = new RectF();
-    private final Path bubbleClipPath = new Path();
-
-    private void drawBubble(Canvas canvas, Gift gift, float cx, float cy, float r, float alpha, float tilt) {
-        if (alpha <= 0f || r <= 0f) return;
-
-        // Soft coloured halo around the sphere, tinted by the gift backdrop.
-        bubbleGlowPaint.setStyle(Paint.Style.STROKE);
-        bubbleGlowPaint.setStrokeWidth(Math.max(dp(1), r * 0.10f));
-        bubbleGlowPaint.setColor(gift.color);
-        bubbleGlowPaint.setAlpha((int) (48 * alpha));
-        canvas.drawCircle(cx, cy, r - bubbleGlowPaint.getStrokeWidth() / 2f, bubbleGlowPaint);
-
-        canvas.save();
-        canvas.translate(cx, cy);
-        bubbleClipPath.rewind();
-        bubbleClipPath.addCircle(0, 0, r, Path.Direction.CW);
-        canvas.clipPath(bubbleClipPath);
-
-        // Smoky glass body: light from the top-left, dark towards the edges.
-        if (gift.bubbleShader == null || Math.abs(gift.bubbleShaderR - r) > 0.5f) {
-            gift.bubbleShaderR = r;
-            gift.bubbleShader = new RadialGradient(-r * 0.32f, -r * 0.38f, r * 1.45f,
-                    new int[]{0x38FFFFFF, 0x16FFFFFF, 0x05FFFFFF, 0x7A000000},
-                    new float[]{0f, 0.32f, 0.68f, 1f}, Shader.TileMode.CLAMP);
-        }
-        bubbleFillPaint.setStyle(Paint.Style.FILL);
-        bubbleFillPaint.setShader(gift.bubbleShader);
-        bubbleFillPaint.setAlpha((int) (255 * alpha));
-        canvas.drawCircle(0, 0, r, bubbleFillPaint);
-        bubbleFillPaint.setShader(null);
-
-        // The gift pattern floats inside the glass, like a faint texture.
-        if (gift.patternDrawable != null) {
-            if (isAttachedToWindow()) gift.patternDrawable.attach();
-            canvas.save();
-            StarGiftPatterns.drawPattern(canvas, StarGiftPatterns.TYPE_GIFT, gift.patternDrawable,
-                    r * 2f, r * 2f, 0.62f * alpha, r * 2f / dp(118));
-            canvas.restore();
-        }
-
-        // Gift itself, slightly off-centre and tilted, like a real object in a bubble.
-        canvas.save();
-        canvas.translate(-r * 0.06f, r * 0.04f);
-        gift.draw(canvas, 0, 0, r / dp(24), tilt, alpha, 0.45f);
-        canvas.restore();
-
-        // Inner shadow near the bottom edge for volume.
-        if (gift.innerShadow == null || Math.abs(gift.innerShadowR - r) > 0.5f) {
-            gift.innerShadowR = r;
-            gift.innerShadow = new RadialGradient(0, 0, r,
-                    new int[]{0x00000000, 0x00000000, 0x66000000},
-                    new float[]{0f, 0.72f, 1f}, Shader.TileMode.CLAMP);
-        }
-        bubbleFillPaint.setStyle(Paint.Style.FILL);
-        bubbleFillPaint.setShader(gift.innerShadow);
-        bubbleFillPaint.setAlpha((int) (150 * alpha));
-        canvas.drawCircle(0, 0, r, bubbleFillPaint);
-        bubbleFillPaint.setShader(null);
-
-        // Coloured rim, drawn a few times to fake a soft, glassy edge.
-        bubbleRimPaint.setStyle(Paint.Style.STROKE);
-        for (int i = 0; i < 3; i++) {
-            final float inset = dp(0.7f) * i;
-            bubbleRimPaint.setStrokeWidth(dp(1.1f));
-            bubbleRimPaint.setColor(gift.color);
-            bubbleRimPaint.setAlpha((int) ((int) (190 * alpha) / (i + 1)));
-            canvas.drawCircle(0, 0, r - inset - bubbleRimPaint.getStrokeWidth() / 2f, bubbleRimPaint);
-        }
-
-        // Specular highlights: bright top-left, soft reflected light at the bottom.
-        bubbleRimPaint.setColor(0xFFFFFFFF);
-        bubbleRimPaint.setStrokeWidth(Math.max(dp(1), r * 0.028f));
-        bubbleRimPaint.setAlpha((int) (170 * alpha));
-        bubbleArcRect.set(-r * 0.86f, -r * 0.86f, r * 0.86f, r * 0.86f);
-        canvas.drawArc(bubbleArcRect, 196f, 54f, false, bubbleRimPaint);
-
-        bubbleRimPaint.setAlpha((int) (90 * alpha));
-        bubbleArcRect.set(-r * 0.80f, -r * 0.80f, r * 0.80f, r * 0.80f);
-        canvas.drawArc(bubbleArcRect, 58f, 44f, false, bubbleRimPaint);
-
-        // Tiny secondary glint.
-        bubbleRimPaint.setAlpha((int) (120 * alpha));
-        bubbleArcRect.set(-r * 0.55f, -r * 0.55f, r * 0.55f, r * 0.55f);
-        canvas.drawArc(bubbleArcRect, 210f, 22f, false, bubbleRimPaint);
 
         canvas.restore();
     }

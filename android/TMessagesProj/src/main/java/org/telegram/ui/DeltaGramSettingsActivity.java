@@ -281,15 +281,6 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 null, R.drawable.msg_customize, v ->
                         presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_OTHER)));
 
-        content.addView(section("Профиль"));
-        addSwitch(content, "Профиль v2 (iOS)",
-                "Крупный аватар по центру, закруглённые кнопки и пузыри подарков вокруг фото — как в Telegram на iOS",
-                prefs().getBoolean(ProfileActivity.PROFILE_V2_PREF, true), (view, checked) -> {
-                    prefs().edit().putBoolean(ProfileActivity.PROFILE_V2_PREF, checked).apply();
-                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
-                            checked ? "Профиль v2 включён. Открой профиль заново."
-                                    : "Профиль v2 выключен. Открой профиль заново.").show();
-                });
     }
 
     private void buildChats(LinearLayout content) {
