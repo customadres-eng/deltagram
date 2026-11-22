@@ -318,7 +318,7 @@ public class SharedConfig {
     public static boolean useSystemBoldFont;
     public static int fontSize = 16;
     public static boolean fontSizeIsDefault;
-    public static int bubbleRadius = 17;
+    public static int bubbleRadius = 22;
     public static String cardCurrency = "RUB";
     // DeltaGram personalization.
     public static boolean keepDeletedMessages;
@@ -621,7 +621,7 @@ public class SharedConfig {
             repeatMode = preferences.getInt("repeatMode", 0);
             fontSize = preferences.getInt("fons_size", AndroidUtilities.isTablet() && !AndroidUtilities.isFold() ? 18 : 16);
             fontSizeIsDefault = !preferences.contains("fons_size");
-            bubbleRadius = preferences.getInt("deltagram_bubble_radius", preferences.getInt("bubbleRadius", 17));
+            bubbleRadius = preferences.getInt("deltagram_bubble_radius", preferences.getInt("bubbleRadius", 22));
             cardCurrency = preferences.getString("deltagram_card_currency", DeltagramCurrency.defaultCode());
             keepDeletedMessages = preferences.getBoolean("deltagram_keep_deleted", true);
             hidePhoneNumber = preferences.getBoolean("deltagram_hide_phone", false);

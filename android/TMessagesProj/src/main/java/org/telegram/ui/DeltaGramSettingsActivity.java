@@ -346,7 +346,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         SharedConfig.hidePhoneNumber = false;
         SharedConfig.showIdAndDc = false;
         SharedConfig.disableNumberRounding = false;
-        SharedConfig.bubbleRadius = 17;
+        SharedConfig.bubbleRadius = 22;
         SharedConfig.updateChatListSwipeSetting(SwipeGestureSettingsView.SWIPE_GESTURE_ARCHIVE);
         NotificationCenter.getInstance(currentAccount).postNotificationName(
                 NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
@@ -545,15 +545,15 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         block.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         TextView description = new TextView(context);
-        description.setText("Скругление пузырей сообщений. 0 — прямоугольные, 17 — как в Telegram.");
+        description.setText("Скругление сообщений. 17 — Telegram, 22 — плавные углы DeltaGram.");
         description.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         description.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         description.setLineSpacing(dp(1), 1f);
         block.addView(description, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 3, 0, 0));
 
         SeekBar seek = new SeekBar(context);
-        seek.setMax(20);
-        seek.setProgress(Math.max(0, Math.min(20, SharedConfig.bubbleRadius)));
+        seek.setMax(24);
+        seek.setProgress(Math.max(0, Math.min(24, SharedConfig.bubbleRadius)));
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -579,7 +579,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     }
 
     private void setBubbleRadius(int radius) {
-        SharedConfig.bubbleRadius = Math.max(0, Math.min(20, radius));
+        SharedConfig.bubbleRadius = Math.max(0, Math.min(24, radius));
         prefs().edit().putInt("deltagram_bubble_radius", SharedConfig.bubbleRadius).apply();
     }
 
