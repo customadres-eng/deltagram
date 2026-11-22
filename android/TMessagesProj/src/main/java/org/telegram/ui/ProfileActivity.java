@@ -6123,7 +6123,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private int getActionsExtraHeight(boolean withPills) {
         if (userId != 0 && imageUpdater != null && !myProfile)
             return 0;
-        return dp(74 + (withPills && (hasMusic || hasBalance) ? 25 : 0));
+        return dp(74 + (withPills && hasMusic ? 25 : 0) + (withPills && hasBalance ? 25 : 0));
     }
 
     private int getHeaderExtraHeight() {
@@ -11385,7 +11385,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             actionsView.updatePosition(listView.getMeasuredWidth(), dp(74));
         } else {
             actionsView.clipHeight = -1;
-            float bottom = extraHeight + newTop - dp(hasMusic || hasBalance ? 25 : 0);
+            float bottom = extraHeight + newTop - dp((hasMusic ? 25 : 0) + (hasBalance ? 25 : 0));
             float height = Math.min(dp(74), bottom - newTop);
             actionsView.updatePosition(bottom - height, height);
         }
@@ -11433,10 +11433,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             return;
         }
         final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
-        // The music pill is drawn at newTop + 72dp; the balances get their own
-        // row right under it so the two pills never overlap.
-        final float top = newTop + dp(72) + (hasMusic ? dp(37) : 0);
-        balanceView.updatePosition(top, dp(37));
+        // Follow the collapsing profile header, not the fixed action bar.
+        // Each pill occupies its own 25dp row after the action buttons.
+        final float top = newTop + extraHeight - dp(25);
+        balanceView.updatePosition(top, Math.min(dp(37), Math.max(0, top - newTop)));
+        balanceView.setAlpha(Math.min(1f, Math.max(0f, (top - newTop - dp(32)) / dp(25))));
     }
 
     private MessagesController.PeerColor peerColor;
