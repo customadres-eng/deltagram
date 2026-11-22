@@ -105,8 +105,17 @@ public final class DeltagramFrames {
     }
 
     private static void invalidateViews() {
+        boolean anyVisible = false;
         for (View view : visibleViews.keySet()) {
-            if (view.isAttachedToWindow() && view.getVisibility() == View.VISIBLE) view.invalidate();
+            if (view.isAttachedToWindow() && view.getVisibility() == View.VISIBLE) {
+                view.invalidate();
+                anyVisible = true;
+            }
+        }
+        // Avoid decoding Lottie frames indefinitely after leaving the profile
+        // or scrolling every framed avatar off screen.
+        if (!anyVisible) {
+            for (RLottieDrawable drawable : animations.values()) drawable.stop();
         }
     }
 
@@ -157,6 +166,7 @@ public final class DeltagramFrames {
         if (host != null) visibleViews.put(host, true);
         RLottieDrawable drawable = animation(kind);
         if (drawable == null) return;
+        if (host != null && host.isAttachedToWindow() && !drawable.isRunning()) drawable.start();
         drawable.setBounds(bounds);
         drawable.draw(canvas);
     }

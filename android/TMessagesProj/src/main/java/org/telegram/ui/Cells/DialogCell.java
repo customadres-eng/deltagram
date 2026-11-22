@@ -4789,7 +4789,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
         // DeltaGram: paint the cosmetic frame over a loaded avatar photo. The
         // AvatarDrawable placeholder already carries the ring while loading.
-        if (user != null && currentDialogId > 0 && avatarImage.hasImageLoaded()) {
+        if (user != null && currentDialogId > 0) {
             android.graphics.Rect frameBounds = AndroidUtilities.rectTmp2;
             frameBounds.set(
                     (int) avatarImage.getImageX(),

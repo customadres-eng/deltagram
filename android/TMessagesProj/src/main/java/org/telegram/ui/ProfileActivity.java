@@ -5422,7 +5422,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (animatedEmojiDrawable != null && animatedEmojiDrawable.getImageReceiver() != null) {
                     animatedEmojiDrawable.getImageReceiver().startAnimation();
                 }
-                if (userId != 0 && currentChat == null && getImageReceiver().hasImageLoaded()) {
+                if (userId != 0 && currentChat == null) {
                     Rect frameBounds = AndroidUtilities.rectTmp2;
                     frameBounds.set(
                             (int) getImageReceiver().getImageX(),
