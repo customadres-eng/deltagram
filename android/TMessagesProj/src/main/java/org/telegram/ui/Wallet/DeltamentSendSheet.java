@@ -32,7 +32,7 @@ import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 public class DeltamentSendSheet extends BottomSheet {
 
     public DeltamentSendSheet(Context context, int account, String kind, Theme.ResourcesProvider resourcesProvider, Runnable onSent) {
-        super(context, false, resourcesProvider);
+        super(context, true, resourcesProvider);
         fixNavigationBar();
         final boolean ton = "ton".equals(kind);
 
