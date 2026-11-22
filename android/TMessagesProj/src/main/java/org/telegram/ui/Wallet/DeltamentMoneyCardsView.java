@@ -86,6 +86,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         tonCard.setDiamondOnCard(true);
         tonCard.setUseGyroscope(1f);
         tonCard.setOnClickListener(v -> showCardQr(false));
+        tonCard.setOnQrClickListener(v -> showCardQr(false));
 
         starsCard = new WalletCardComponent(context);
         starsCard.setCardHolder("DELTA");
@@ -94,6 +95,7 @@ public class DeltamentMoneyCardsView extends LinearLayout implements Notificatio
         DeltamentCardStyle.apply(starsCard, 1);
         starsCard.setUseGyroscope(0f);
         starsCard.setOnClickListener(v -> showCardQr(true));
+        starsCard.setOnQrClickListener(v -> showCardQr(true));
 
         pager = new SGMoneyCardsPager(context, tonCard, starsCard);
         pager.setListener(new SGMoneyCardsPager.Listener() {

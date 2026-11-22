@@ -56,7 +56,7 @@ public class DeltamentPublicCardSheet extends BottomSheet {
         tabs.setGravity(Gravity.CENTER);
         TextView gramTab = makeTab(context, "GRAM", resourcesProvider);
         TextView starsTab = makeTab(context, "STARS", resourcesProvider);
-        tabs.addView(gramTab, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 0, 24));
+        tabs.addView(gramTab, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 0, 0));
         tabs.addView(starsTab, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
         content.addView(tabs, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
