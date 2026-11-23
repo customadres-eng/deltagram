@@ -2645,10 +2645,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         // The avatar itself.
         exclusions.add(new RectF(acx - radius - dp(10), acy - radius - dp(10),
                 acx + radius + dp(10), acy + radius + dp(10)));
-        // Name, status and the action capsules under the avatar.
+        // Name, status and the action capsules under the avatar. On foreign
+        // profiles the block is a little shorter, so the bubbles that do not
+        // fit around the avatar land in one tidy row right under the capsules
+        // instead of falling back to the screen edges.
         final float blockTop = acy + radius + dp(4);
         final float blockWidth = Math.min(w - dp(16), dp(340));
-        final float blockBottom = Math.min(navTop - dp(4), blockTop + dp(126));
+        final float blockBottom = Math.min(navTop - dp(4), blockTop + dp(canDrag ? 126 : 112));
         exclusions.add(new RectF((w - blockWidth) / 2f, blockTop, (w + blockWidth) / 2f, blockBottom));
         // System navigation bar.
         exclusions.add(new RectF(0, navTop, w, h));
