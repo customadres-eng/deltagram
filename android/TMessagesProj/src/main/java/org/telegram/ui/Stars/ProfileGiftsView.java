@@ -8,13 +8,18 @@ import static org.telegram.ui.Stars.StarsIntroActivity.setGiftImage;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RadialGradient;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.os.SystemClock;
@@ -31,6 +36,7 @@ import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
@@ -85,6 +91,45 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private int musicGlowAccent;
     private float musicKick, musicLevel, musicTime;
     private float lastSpinProgress;
+
+    /**
+     * "Мяууу" companion: Paimon is pre-rendered from the bundled Blockbench
+     * model into sprite sheets (res/drawable-nodpi), so the profile does not
+     * need a 3D engine. She flies around the profile, and from time to time
+     * flies up to one of the pinned gift bubbles and stares at it.
+     */
+    private static final int CAT_SHEET_COLS = 8;
+    private static final int CAT_FLY_FRAMES = 24;
+    private static final int CAT_FLY_LOOP_MS = 1600;
+    private static final int CAT_HAPPY_FRAMES = 16;
+    private static final int CAT_SURPRISED_FRAMES = 16;
+    private static final int CAT_EMOTION_MS = 1200;
+    private static final int CAT_WANDER = 0;
+    private static final int CAT_TO_GIFT = 1;
+    private static final int CAT_LOOK = 2;
+
+    private Bitmap catFlySheet, catHappySheet, catSurprisedSheet;
+    private boolean catLoadFailed;
+    private final Paint catPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Paint catHeartPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint catGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint catOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Rect catSrcRect = new Rect();
+    private final RectF catDstRect = new RectF();
+    private final Path catHeartPath = new Path();
+
+    private int catState = CAT_WANDER;
+    private boolean catInitialized;
+    private float catX, catY, catVX, catVY;
+    private float catTargetX, catTargetY;
+    private float catFacing = 1f;
+    private float catFacingTarget = 1f;
+    private float catTilt, catAttention, catAlpha;
+    private float catBob;
+    private long catRetargetAt, catNextLookAt, catLookStart, catLookEnd;
+    private long catFlyStart;
+    private Gift catGift;
+    private final Random catRandom = new Random();
 
     /** Positions are re-generated from a stable seed, like Telegram for iOS does. */
     private final Random bubbleRandom = new Random(System.currentTimeMillis() / 1000L);
@@ -158,6 +203,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         this.canDrag = dialogId == UserConfig.getInstance(currentAccount).getClientUserId();
         avatarMaskPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+        catOutlinePaint.setColorFilter(new PorterDuffColorFilter(0x66000000, PorterDuff.Mode.SRC_IN));
+        catOutlinePaint.setAlpha(170);
         INSTANCES.add(new java.lang.ref.WeakReference<>(this));
     }
 
@@ -254,6 +301,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         dragHoldMs = 0f;
         dragVortex = 0f;
         musicKick = musicLevel = 0f;
+        catAttention = 0f;
+        catGift = null;
+        catState = CAT_WANDER;
+        catInitialized = false;
+        catAlpha = 0f;
+        releaseCat();
 
         for (Gift gift : gifts) {
             if (gift.imageReceiver != null) {
@@ -269,6 +322,349 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 update();
             }
         }
+    }
+
+    // ---------------------------------------------------------------- "Мяууу"
+
+    private void ensureCatLoaded() {
+        if (catFlySheet != null || catLoadFailed) {
+            return;
+        }
+        try {
+            final BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inScaled = false;
+            catFlySheet = BitmapFactory.decodeResource(getResources(), R.drawable.deltagram_myaau_fly, options);
+            catHappySheet = BitmapFactory.decodeResource(getResources(), R.drawable.deltagram_myaau_happy, options);
+            catSurprisedSheet = BitmapFactory.decodeResource(getResources(), R.drawable.deltagram_myaau_surprised, options);
+        } catch (Throwable ignore) {
+        }
+        if (catFlySheet == null || catHappySheet == null || catSurprisedSheet == null) {
+            releaseCat();
+            catLoadFailed = true;
+        }
+    }
+
+    private void releaseCat() {
+        if (catFlySheet != null) {
+            catFlySheet.recycle();
+            catFlySheet = null;
+        }
+        if (catHappySheet != null) {
+            catHappySheet.recycle();
+            catHappySheet = null;
+        }
+        if (catSurprisedSheet != null) {
+            catSurprisedSheet.recycle();
+            catSurprisedSheet = null;
+        }
+    }
+
+    private float catTop() {
+        return AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight() + dp(10);
+    }
+
+    private float catBottom(float viewBottom) {
+        final float nav = Math.max(AndroidUtilities.navigationBarHeight, dp(8));
+        return Math.max(catTop() + dp(80), Math.min(viewBottom, getHeight()) - nav - dp(12));
+    }
+
+    private void resetCatPosition(long now, float acx, float acy, float avatarRadius, float viewBottom) {
+        catInitialized = true;
+        final double angle = catRandom.nextDouble() * Math.PI * 2.0;
+        final float distance = avatarRadius * (1.55f + catRandom.nextFloat() * 0.55f);
+        catX = acx + (float) Math.cos(angle) * distance;
+        catY = acy + (float) Math.sin(angle) * distance;
+        catVX = catVY = 0f;
+        catFacing = catFacingTarget = catX < acx ? -1f : 1f;
+        catTilt = 0f;
+        catAttention = 0f;
+        catAlpha = 0f;
+        catBob = 0f;
+        catFlyStart = now;
+        catState = CAT_WANDER;
+        catGift = null;
+        chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+        catNextLookAt = now + 3500L + catRandom.nextInt(4000);
+    }
+
+    private void chooseCatWanderTarget(long now, float acx, float acy, float avatarRadius, float viewBottom) {
+        final float w = Math.max(getWidth(), dp(200));
+        final float top = catTop();
+        final float bottom = catBottom(viewBottom);
+        if (catRandom.nextFloat() < 0.45f) {
+            final double angle = catRandom.nextDouble() * Math.PI * 2.0;
+            final float distance = avatarRadius * (1.3f + catRandom.nextFloat() * 0.8f);
+            catTargetX = acx + (float) Math.cos(angle) * distance;
+            catTargetY = acy + (float) Math.sin(angle) * distance;
+        } else {
+            catTargetX = dp(24) + catRandom.nextFloat() * Math.max(1f, w - dp(48));
+            catTargetY = top + catRandom.nextFloat() * Math.max(1f, bottom - top);
+        }
+        catTargetX = clamp(catTargetX, dp(18), w - dp(18));
+        catTargetY = clamp(catTargetY, top, bottom);
+        catRetargetAt = now + 2200L + catRandom.nextInt(2600);
+    }
+
+    /** Prefers pinned gifts, exactly like the requirement says. */
+    private Gift pickCatGift() {
+        if (gifts.isEmpty()) {
+            return null;
+        }
+        Gift best = null;
+        int seen = 0;
+        for (int pass = 0; pass < 2 && best == null; pass++) {
+            for (int i = 0; i < gifts.size(); i++) {
+                final Gift gift = gifts.get(i);
+                if (gift == draggingGift || (pass == 0 && !gift.pinned)) {
+                    continue;
+                }
+                seen++;
+                if (catRandom.nextInt(seen) == 0) {
+                    best = gift;
+                }
+            }
+        }
+        return best;
+    }
+
+    private float catSpotX(Gift gift, float acx, float acy) {
+        final float dx = gift.drawX - acx;
+        final float dy = gift.drawY - acy;
+        final float d = (float) Math.hypot(dx, dy);
+        final float nx = d > 1f ? dx / d : 1f;
+        return gift.drawX + nx * dp(58);
+    }
+
+    private float catSpotY(Gift gift, float acx, float acy) {
+        final float dx = gift.drawX - acx;
+        final float dy = gift.drawY - acy;
+        final float d = (float) Math.hypot(dx, dy);
+        final float ny = d > 1f ? dy / d : 0f;
+        return gift.drawY + ny * dp(58);
+    }
+
+    private void updateCat(float dt, long now, float acx, float acy, float avatarRadius, float viewBottom, float visibility) {
+        if (!DeltamentProfileMusic.isCatEnabled()) {
+            return;
+        }
+        ensureCatLoaded();
+        if (catFlySheet == null) {
+            return;
+        }
+        if (!catInitialized) {
+            resetCatPosition(now, acx, acy, avatarRadius, viewBottom);
+        }
+
+        catBob += dt / 1000f;
+        catAlpha += ((visibility > 0.12f ? 1f : 0f) - catAlpha) * (1f - (float) Math.exp(-dt / 260f));
+
+        if (catGift == draggingGift) {
+            catGift = null;
+            catState = CAT_WANDER;
+            chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+        }
+
+        if (catState == CAT_LOOK) {
+            if (catGift == null || !gifts.contains(catGift) || now >= catLookEnd) {
+                catState = CAT_WANDER;
+                catGift = null;
+                chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            }
+        } else if (catState == CAT_TO_GIFT) {
+            if (catGift == null || !gifts.contains(catGift)) {
+                catState = CAT_WANDER;
+                catGift = null;
+                chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            }
+        } else {
+            final float dx = catTargetX - catX;
+            final float dy = catTargetY - catY;
+            if (now >= catRetargetAt || dx * dx + dy * dy < dp(8) * dp(8)) {
+                chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            }
+            if (now >= catNextLookAt) {
+                final Gift gift = pickCatGift();
+                if (gift != null) {
+                    catGift = gift;
+                    catState = CAT_TO_GIFT;
+                } else {
+                    catNextLookAt = now + 5000L;
+                }
+            }
+        }
+
+        if (catGift != null) {
+            catTargetX = catSpotX(catGift, acx, acy);
+            catTargetY = catSpotY(catGift, acx, acy);
+            if (catState == CAT_LOOK) {
+                catFacingTarget = catGift.drawX >= catX ? 1f : -1f;
+            }
+        }
+
+        final float top = catTop();
+        final float bottom = catBottom(viewBottom);
+        final float minX = dp(18);
+        final float maxX = Math.max(minX, getWidth() - dp(18));
+
+        float tx = clamp(catTargetX, minX, maxX);
+        float ty = clamp(catTargetY, top, bottom);
+        if (catState == CAT_LOOK) {
+            // Hover next to the gift instead of freezing in place.
+            ty += (float) Math.sin(catBob * 2.2f) * dp(2.6f);
+            tx += (float) Math.cos(catBob * 1.7f) * dp(1.6f);
+        }
+
+        final float dx = tx - catX;
+        final float dy = ty - catY;
+        final float distance = (float) Math.hypot(dx, dy);
+        final float speed = catState == CAT_TO_GIFT ? dpf2(150)
+                : catState == CAT_LOOK ? dpf2(26) : dpf2(62);
+        float desiredVX = 0f, desiredVY = 0f;
+        if (distance > 0.5f) {
+            desiredVX = dx / distance * speed;
+            desiredVY = dy / distance * speed;
+        }
+        final float steer = 1f - (float) Math.exp(-dt / (catState == CAT_LOOK ? 300f : 210f));
+        catVX += (desiredVX - catVX) * steer;
+        catVY += (desiredVY - catVY) * steer;
+        catX += catVX * dt / 1000f;
+        catY += catVY * dt / 1000f;
+
+        if (catX < minX) {
+            catX = minX;
+            catVX = Math.abs(catVX) * 0.35f;
+        } else if (catX > maxX) {
+            catX = maxX;
+            catVX = -Math.abs(catVX) * 0.35f;
+        }
+        if (catY < top) {
+            catY = top;
+            catVY = Math.abs(catVY) * 0.35f;
+        } else if (catY > bottom) {
+            catY = bottom;
+            catVY = -Math.abs(catVY) * 0.35f;
+        }
+
+        if (catState == CAT_WANDER && Math.abs(catVX) > dp(6)) {
+            catFacingTarget = catVX > 0f ? 1f : -1f;
+        }
+        catFacing += (catFacingTarget - catFacing) * (1f - (float) Math.exp(-dt / 150f));
+
+        final float tiltTarget = clamp(catVX / dpf2(620f), -1f, 1f) * 7f
+                + clamp(catVY / dpf2(700f), -1f, 1f) * 3f
+                + (catState == CAT_LOOK && catGift != null
+                        ? (catGift.drawX >= catX ? 8f : -8f) : 0f);
+        catTilt += (tiltTarget - catTilt) * (1f - (float) Math.exp(-dt / 200f));
+
+        final float attentionTarget = catState == CAT_LOOK && catGift != null ? 1f : 0f;
+        catAttention += (attentionTarget - catAttention) * (1f - (float) Math.exp(-dt / 240f));
+
+        if (catState == CAT_TO_GIFT && catGift != null && distance < dp(6)) {
+            catState = CAT_LOOK;
+            catLookStart = now;
+            catLookEnd = now + 2600L + catRandom.nextInt(1500);
+            catNextLookAt = now + 9000L + catRandom.nextInt(7000);
+        }
+    }
+
+    private void drawCat(Canvas canvas, long now, float visibility) {
+        if (catFlySheet == null || catHappySheet == null || catSurprisedSheet == null
+                || catAlpha <= 0.01f || visibility <= 0.001f) {
+            return;
+        }
+
+        final Bitmap sheet;
+        final int frame;
+        if (catState == CAT_LOOK && catGift != null) {
+            final long lookElapsed = Math.max(0L, now - catLookStart);
+            if (lookElapsed < 700L) {
+                sheet = catSurprisedSheet;
+                frame = Math.min(CAT_SURPRISED_FRAMES - 1,
+                        (int) (lookElapsed * CAT_SURPRISED_FRAMES / 900L));
+            } else {
+                sheet = catHappySheet;
+                frame = (int) (((lookElapsed - 700L) % CAT_EMOTION_MS) * CAT_HAPPY_FRAMES / CAT_EMOTION_MS);
+            }
+        } else {
+            sheet = catFlySheet;
+            frame = (int) ((Math.max(0L, now - catFlyStart) % CAT_FLY_LOOP_MS)
+                    * CAT_FLY_FRAMES / CAT_FLY_LOOP_MS);
+        }
+
+        final int cell = sheet.getWidth() / CAT_SHEET_COLS;
+        if (cell <= 0) {
+            return;
+        }
+        final int col = frame % CAT_SHEET_COLS;
+        final int row = Math.min(sheet.getHeight() / cell - 1, frame / CAT_SHEET_COLS);
+        catSrcRect.set(col * cell, row * cell, (col + 1) * cell, (row + 1) * cell);
+
+        final float size = dp(64) * (1f + 0.05f * catAttention)
+                * (0.97f + 0.03f * (float) Math.sin(catBob * 2.1f));
+        final float half = size / 2f;
+        catDstRect.set(-half, -half, half, half);
+
+        // Soft contact shadow keeps the pale model readable on light themes.
+        canvas.save();
+        canvas.translate(catX, catY + size * 0.38f);
+        canvas.scale(1f, 0.34f);
+        catGlowPaint.setShader(null);
+        catGlowPaint.setColor(0x30000000);
+        canvas.drawCircle(0f, 0f, size * 0.29f, catGlowPaint);
+        canvas.restore();
+
+        float flip = catFacing;
+        if (Math.abs(flip) < 0.38f) {
+            flip = flip < 0f ? -0.38f : 0.38f;
+        }
+        catPaint.setAlpha((int) (255f * catAlpha * visibility));
+        catOutlinePaint.setAlpha((int) (170f * catAlpha * visibility));
+        canvas.save();
+        canvas.translate(catX, catY);
+        canvas.rotate(catTilt);
+        canvas.scale(flip * 1.055f, 1.055f);
+        canvas.drawBitmap(sheet, catSrcRect, catDstRect, catOutlinePaint);
+        canvas.restore();
+        canvas.save();
+        canvas.translate(catX, catY);
+        canvas.rotate(catTilt);
+        canvas.scale(flip, 1f);
+        canvas.drawBitmap(sheet, catSrcRect, catDstRect, catPaint);
+        canvas.restore();
+    }
+
+    private void drawCatHearts(Canvas canvas, long now, float visibility) {
+        if (catGift == null || catGift == draggingGift || catAttention < 0.01f) {
+            return;
+        }
+        final float gx = catGift.drawX;
+        final float gy = catGift.drawY;
+        for (int i = 0; i < 3; i++) {
+            final float t = (((now - catLookStart) / 1500f) + i / 3f) % 1f;
+            final float x = lerp(gx, catX, 0.28f + 0.35f * t)
+                    + (float) Math.sin((t * 2.4f + i) * Math.PI * 2f) * dp(5f);
+            final float y = lerp(gy - dp(4), catY, 0.20f + 0.35f * t) - dp(15f) * t;
+            final float alpha = catAttention * visibility * (float) Math.sin(Math.PI * t);
+            drawHeart(canvas, x, y, dp(6.2f) * (0.82f + 0.28f * t), alpha * 0.9f);
+        }
+    }
+
+    private void drawHeart(Canvas canvas, float x, float y, float size, float alpha) {
+        if (alpha <= 0.01f) {
+            return;
+        }
+        catHeartPaint.setColor(0xFFFF7FB2);
+        catHeartPaint.setAlpha((int) (255f * Math.min(1f, alpha)));
+        catHeartPaint.setStyle(Paint.Style.FILL);
+        catHeartPath.reset();
+        catHeartPath.moveTo(0f, size * 0.42f);
+        catHeartPath.cubicTo(-size * 0.95f, -size * 0.18f, -size * 0.42f, -size * 0.92f, 0f, -size * 0.32f);
+        catHeartPath.cubicTo(size * 0.42f, -size * 0.92f, size * 0.95f, -size * 0.18f, 0f, size * 0.42f);
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(-10f);
+        canvas.drawPath(catHeartPath, catHeartPaint);
+        canvas.restore();
     }
 
     private SharedPreferences prefs() {
@@ -331,6 +727,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         private boolean documentResolved;
 
         public int position = -1;
+        /** Pinned-to-top gifts are the ones the "Мяууу" companion prefers. */
+        public boolean pinned;
 
         public Gift(TL_stars.TL_starGiftUnique gift) {
             id = gift.id;
@@ -406,6 +804,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             animatedFloat = b.animatedFloat;
             particles = b.particles;
             position = b.position;
+            pinned = b.pinned;
             offsetX = b.offsetX;
             offsetY = b.offsetY;
             orbitDistance = b.orbitDistance;
@@ -744,6 +1143,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 final TL_stars.SavedStarGift savedGift = list.gifts.get(i);
                 if (!savedGift.unsaved && savedGift.pinned_to_top && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
                     final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
+                    gift.pinned = true;
                     if (!giftIds.contains(gift.id)) {
                         gifts.add(gift);
                         giftIds.add(gift.id);
@@ -869,13 +1269,33 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         updateMusicPulse(dt);
         final boolean musicVisible = visibility > 0.001f
                 && (musicKick > 0.01f || musicLevel > 0.01f);
+        final boolean catOn = DeltamentProfileMusic.isCatEnabled();
+        if (!catOn && (catFlySheet != null || catGift != null || catAlpha > 0f)) {
+            catGift = null;
+            catState = CAT_WANDER;
+            catAttention = 0f;
+            catAlpha = 0f;
+            catInitialized = false;
+            releaseCat();
+            catLoadFailed = false;
+        }
 
         if (gifts.isEmpty()) {
-            // A musical profile should still breathe when there is nothing to orbit.
-            if (musicVisible) {
+            // A musical profile should still breathe when there is nothing to
+            // orbit, and "Мяууу" still flies around the avatar.
+            final boolean showCat = catOn && visibility > 0.001f;
+            if (showCat) {
+                updateCat(dt, now, acx, acy, avatarRadius, viewBottom, visibility);
+            }
+            if (musicVisible || showCat) {
                 canvas.save();
                 canvas.clipRect(0, 0, getWidth(), viewBottom);
-                drawMusicVisualizer(canvas, acx, acy, avatarRadius, visibility);
+                if (musicVisible) {
+                    drawMusicVisualizer(canvas, acx, acy, avatarRadius, visibility);
+                }
+                if (showCat) {
+                    drawCat(canvas, now, visibility);
+                }
                 canvas.restore();
                 if (isAttachedToWindow()) {
                     postInvalidateOnAnimation();
@@ -929,7 +1349,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         final float spinP = spinProgress(now);
         final float spin = spinOffset(spinP);
-        final float gather = (float) Math.sin(spinP * Math.PI);
+        final float gather = spinGather(spinP);
         final boolean spinning = spinP > 0.0001f;
         if (spinning && lastSpinProgress <= 0.0001f) {
             // Fresh fling: drop the physical displacement, the ring has to be
@@ -958,13 +1378,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             float scale = gift.orbitScale;
             float front = 0f;
             if (gather > 0.001f) {
-                // On a fast release every bubble is pulled towards a compact
-                // ring around the avatar before flying back to its slot. The
-                // ring is close enough for the spheres to actually pass over
-                // the avatar, which is what enables the front/behind depth.
-                final float ring = avatarRadius * (1.04f + 0.34f * (i % 4) / 3f);
-                distance = lerp(distance, ring, 0.95f * gather);
-                scale *= 1f + 0.09f * gather;
+                // On a fast release every bubble is pulled into a tight ring
+                // hugging the avatar, so from the very first moment the spheres
+                // cross its silhouette and the orbit reads as "goes behind the
+                // avatar and comes back in front".
+                final float ring = avatarRadius * (0.90f + 0.22f * (i % 4) / 3f);
+                distance = lerp(distance, ring, 0.99f * gather);
+                scale *= 1f + 0.07f * gather;
             }
             final float angle = gift.orbitAngle + spin;
             if (gather > 0.001f) {
@@ -974,11 +1394,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             }
 
             float gx = acx + (float) Math.cos(angle) * distance;
-            // The orbit plane is tilted, so it projects to an ellipse while the
-            // spheres spin; at rest the layout is used untouched.
-            float gy = acy + (float) Math.sin(angle) * distance * (1f - 0.60f * gather) + hover;
-            gy += front * avatarRadius * 0.08f;
-            scale *= 1f + 0.13f * front;
+            // Flatten the orbit while spinning, so the near half passes right
+            // across the lower part of the photo and the far half hides behind
+            // the upper one; at rest the layout is used untouched.
+            float gy = acy + (float) Math.sin(angle) * distance * (1f - 0.68f * gather) + hover;
+            gy += front * avatarRadius * 0.10f;
+            scale *= 1f + 0.16f * front;
             gift.baseCx = gx;
             gift.baseCy = gy;
 
@@ -1016,6 +1437,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 }
             }
 
+            if (!spinning && gift.settleStart == 0L && enter >= 0.999f) {
+                // Resting bubbles must stay reachable: never hidden under the
+                // action bar and never pushed off the screen after a spin.
+                final float halfSize = dp(27) * scale;
+                gx = clamp(gx, dp(10), Math.max(dp(10), getWidth() - dp(10)));
+                gy = clamp(gy, barBottom + dp(3) + halfSize,
+                        Math.max(barBottom + dp(3) + halfSize,
+                                dragBottom() - dp(6) - halfSize));
+            }
+
             gift.drawX = gx;
             gift.drawY = gy;
             gift.drawScale = scale * musicScale;
@@ -1049,6 +1480,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             g.lastCy = g.drawY;
         }
 
+        if (catOn) {
+            updateCat(dt, now, acx, acy, avatarRadius, viewBottom, visibility);
+        }
+
         canvas.save();
         canvas.clipRect(0, 0, getWidth(), viewBottom);
 
@@ -1061,6 +1496,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final int count = drawOrderForFrame();
         for (int i = 0; i < count; i++) {
             drawGiftWithDepth(canvas, drawOrder[i], acx, acy, avatarRadius);
+        }
+
+        if (catOn) {
+            drawCatHearts(canvas, now, visibility);
+            drawCat(canvas, now, visibility);
         }
 
         if (draggingGift != null) {
@@ -1101,6 +1541,16 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     private void drawGiftWithDepth(Canvas canvas, Gift gift, float acx, float acy, float avatarRadius) {
+        float scale = gift.drawScale;
+        float glow = gift.drawGlow;
+        float wiggle = gift.drawWiggle;
+        if (gift == catGift && catAttention > 0.001f) {
+            // The bubble the companion is staring at gets a soft pulse.
+            scale *= 1f + 0.10f * catAttention;
+            glow += 1.1f * catAttention;
+            wiggle += 0.025f * catAttention
+                    * (float) Math.sin(SystemClock.uptimeMillis() / 170.0);
+        }
         final boolean behind = gift.drawFront < -0.02f;
         if (behind) {
             final float dx = gift.drawX - acx;
@@ -1115,15 +1565,15 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                         gift.drawX + dp(80), gift.drawY + dp(80)
                 );
                 final int save = canvas.saveLayer(depthLayerRect, null);
-                gift.draw(canvas, gift.drawX, gift.drawY, gift.drawScale, gift.drawWiggle,
-                        gift.drawAlpha, gift.drawGlow, 0f, 0f);
+                gift.draw(canvas, gift.drawX, gift.drawY, scale, wiggle,
+                        gift.drawAlpha, glow, 0f, 0f);
                 canvas.drawCircle(acx, acy, avatarRadius, avatarMaskPaint);
                 canvas.restoreToCount(save);
                 return;
             }
         }
-        gift.draw(canvas, gift.drawX, gift.drawY, gift.drawScale, gift.drawWiggle,
-                gift.drawAlpha, gift.drawGlow, 0f, 0f);
+        gift.draw(canvas, gift.drawX, gift.drawY, scale, wiggle,
+                gift.drawAlpha, glow, 0f, 0f);
     }
 
     private float giftCenterX(Gift gift) {
@@ -1334,7 +1784,36 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         if (progress <= 0f) {
             return 0f;
         }
-        return flingSpinDir * flingSpinTurns * (float) (Math.PI * 2) * easeOutCubic(progress);
+        return flingSpinDir * flingSpinTurns * (float) (Math.PI * 2) * spinEase(progress);
+    }
+
+    /**
+     * Slope of the spin over time. Mostly linear, so the orbit keeps visibly
+     * rotating through the whole duration; the small cosine blend only softens
+     * the start and the stop (an ease-out made the spin look 1 s long).
+     */
+    private static float spinEase(float progress) {
+        final float p = progress < 0f ? 0f : (progress > 1f ? 1f : progress);
+        final float smooth = 0.5f - 0.5f * (float) Math.cos(Math.PI * p);
+        return p * 0.55f + smooth * 0.45f;
+    }
+
+    /**
+     * How strongly the bubbles are pulled into the orbit ring. It snaps in
+     * almost immediately (so the very first moment already passes behind the
+     * avatar), holds for the whole spin, then releases quickly at the end so
+     * every bubble glides back to its own slot.
+     */
+    private static float spinGather(float progress) {
+        if (progress <= 0f || progress >= 1f) {
+            return 0f;
+        }
+        final float rise = 0.045f;
+        final float fall = 0.10f;
+        final float linear = progress < rise ? progress / rise
+                : (progress > 1f - fall ? (1f - progress) / fall : 1f);
+        final float g = linear < 0f ? 0f : (linear > 1f ? 1f : linear);
+        return g * g * (3f - 2f * g);
     }
 
     /**
@@ -1357,16 +1836,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float pad = dp(6);
         final float minDistance = dp(58);
 
-        final float barTop = AndroidUtilities.statusBarHeight;
-        final float barBottom = barTop + ActionBar.getCurrentActionBarHeight();
+        final float barBottom = AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight();
         final float navTop = h - Math.max(AndroidUtilities.navigationBarHeight, dp(8)) - dp(4);
 
         final ArrayList<RectF> exclusions = new ArrayList<>();
-        // Status bar plus the navigation buttons (gifts may float between them,
-        // exactly like on iOS).
-        exclusions.add(new RectF(0, 0, w, barTop + dp(4)));
-        exclusions.add(new RectF(dp(4), barTop, dp(60), barBottom));
-        exclusions.add(new RectF(w - dp(150), barTop, w - dp(4), barBottom));
+        // The whole top strip (status bar + tab bar), not just its corners:
+        // bubbles that end up there cannot be grabbed on most devices.
+        exclusions.add(new RectF(0, 0, w, barBottom + dp(2)));
         // The avatar itself.
         exclusions.add(new RectF(acx - radius - dp(10), acy - radius - dp(10),
                 acx + radius + dp(10), acy + radius + dp(10)));
@@ -1412,7 +1888,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         // mostly below the avatar and along both side margins.
         while (placed < count && attempts < count * 900) {
             attempts++;
-            final float usableTop = pad;
+            final float usableTop = barBottom + dp(6);
             final float usableBottom = navTop - dp(4);
             final float px, py;
             if (bubbleRandom.nextFloat() < 0.68f) {
@@ -1646,25 +2122,31 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
         if (gift != null && apply) {
             final long now = SystemClock.uptimeMillis();
-            if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
-                final float nx = (dragCx - gift.baseCx) / lastAvatarWidth;
-                final float ny = (dragCy - gift.baseCy) / lastAvatarHeight;
-                if (!Float.isNaN(nx) && !Float.isInfinite(nx) && !Float.isNaN(ny) && !Float.isInfinite(ny)) {
-                    gift.offsetX = clamp(nx, -6f, 6f);
-                    gift.offsetY = clamp(ny, -6f, 6f);
-                    savePosition(gift);
-                }
-            }
-            // Glide from the render position (which lags the finger) back into
-            // the saved slot.
-            gift.settleStart = now;
-            gift.settleFromX = dragRenderX;
-            gift.settleFromY = dragRenderY;
-            gift.settleFromScale = dragLift;
-
             final float speed = (float) Math.hypot(lastVelocityX, lastVelocityY);
             if (speed > dp(600)) {
+                // Fast release: do NOT persist the release point. A fling almost
+                // always ends near a screen edge/corner, and saving that offset
+                // used to strand the bubble there for good. The slot from before
+                // the gesture is kept, so after orbiting the bubbles go exactly
+                // back to where they were.
+                gift.settleStart = 0L;
                 startFlingSpin(speed, lastVelocityX, lastVelocityY);
+            } else {
+                if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
+                    final float nx = (dragCx - gift.baseCx) / lastAvatarWidth;
+                    final float ny = (dragCy - gift.baseCy) / lastAvatarHeight;
+                    if (!Float.isNaN(nx) && !Float.isInfinite(nx) && !Float.isNaN(ny) && !Float.isInfinite(ny)) {
+                        gift.offsetX = clamp(nx, -6f, 6f);
+                        gift.offsetY = clamp(ny, -6f, 6f);
+                        savePosition(gift);
+                    }
+                }
+                // Glide from the render position (which lags the finger) back
+                // into the saved slot.
+                gift.settleStart = now;
+                gift.settleFromX = dragRenderX;
+                gift.settleFromY = dragRenderY;
+                gift.settleFromScale = dragLift;
             }
         }
         lastVelocityX = lastVelocityY = 0f;
@@ -1674,9 +2156,17 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     /** Fast release: all bubbles gather around the avatar and orbit it. */
     private void startFlingSpin(float speed, float vx, float vy) {
         flingSpinStart = SystemClock.uptimeMillis();
-        flingSpinDuration = 3000L;
-        flingSpinTurns = speed > dp(2600) ? 3 : (speed > dp(1400) ? 2 : 1);
+        // Long enough to actually enjoy the orbit: two turns minimum, ~5.6 s.
+        flingSpinDuration = 5600L;
+        flingSpinTurns = speed > dp(2600) ? 4 : (speed > dp(1400) ? 3 : 2);
         lastSpinProgress = 0f;
+        // A pending release glide would fight the orbit, and leftover physical
+        // displacement would keep the ring from being perfectly round.
+        for (int i = 0; i < gifts.size(); i++) {
+            final Gift g = gifts.get(i);
+            g.settleStart = 0L;
+            g.physX = g.physY = g.velX = g.velY = 0f;
+        }
         final float direction = Math.abs(vx) > dp(120) ? vx : vy;
         flingSpinDir = direction >= 0f ? 1 : -1;
         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
