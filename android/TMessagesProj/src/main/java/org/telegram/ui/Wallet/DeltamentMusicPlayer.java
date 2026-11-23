@@ -87,6 +87,15 @@ public final class DeltamentMusicPlayer {
         return loading;
     }
 
+    /** Current playback position in ms, or 0 when nothing is prepared yet. */
+    public long getPositionMs() {
+        try {
+            return player != null && prepared ? player.getCurrentPosition() : 0L;
+        } catch (Throwable e) {
+            return 0L;
+        }
+    }
+
     public void play(DeltamentSoundCloudClient.Track track) {
         if (track == null) {
             return;

@@ -12,6 +12,8 @@ import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -69,6 +71,21 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private final Paint bubbleGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF bubbleRimRect = new RectF();
 
+    /** Punches the avatar silhouette out of a bubble that orbits behind it. */
+    private final Paint avatarMaskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF depthLayerRect = new RectF();
+    /** Reused depth-sorting buffer (back-most bubble first). */
+    private Gift[] drawOrder = new Gift[0];
+
+    /** Radial equalizer + glow around the avatar, driven by the music player. */
+    private final Paint musicBarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint musicGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private RadialGradient musicGlowShader;
+    private float musicGlowRadius = -1f;
+    private int musicGlowAccent;
+    private float musicKick, musicLevel, musicTime;
+    private float lastSpinProgress;
+
     /** Positions are re-generated from a stable seed, like Telegram for iOS does. */
     private final Random bubbleRandom = new Random(System.currentTimeMillis() / 1000L);
     private boolean positionsDirty = true;
@@ -116,6 +133,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private boolean dragLongPressPosted;
     private final Runnable dragLongPressRunnable = this::startDrag;
 
+    /** How long the bubble has been held still, drives the vortex strength. */
+    private float dragHoldMs;
+    private float dragVortex;
+
     /** Size of the avatar box used for the last layout, for normalised offsets. */
     private float lastAvatarWidth, lastAvatarHeight;
 
@@ -136,6 +157,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         this.resourcesProvider = resourcesProvider;
 
         this.canDrag = dialogId == UserConfig.getInstance(currentAccount).getClientUserId();
+        avatarMaskPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
         INSTANCES.add(new java.lang.ref.WeakReference<>(this));
     }
 
@@ -228,6 +250,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         releaseVelocityTracker();
         flingSpinStart = -1L;
         lastFrameTime = 0L;
+        lastSpinProgress = 0f;
+        dragHoldMs = 0f;
+        dragVortex = 0f;
+        musicKick = musicLevel = 0f;
 
         for (Gift gift : gifts) {
             if (gift.imageReceiver != null) {
@@ -360,6 +386,14 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         /** Glide back to the layout after the user releases the bubble. */
         public long settleStart;
         public float settleFromX, settleFromY, settleFromScale = 1f;
+
+        /** Physical displacement from the layout slot, in pixels. */
+        public float physX, physY;
+        /** Physical velocity of the displacement, in pixels per second. */
+        public float velX, velY;
+        /** Position computed for the current frame, before the physics offset. */
+        public float drawX, drawY;
+        public float drawScale = 1f, drawAlpha, drawGlow, drawFront, drawWiggle;
 
         /** Orbit slot around the avatar, in the style of Telegram for iOS. */
         public float orbitDistance, orbitAngle, orbitScale = 1f;
@@ -812,7 +846,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        if (!active || gifts.isEmpty()) return;
+        if (!active) return;
 
         final float realX = avatarContainer.getX();
         final float realY = avatarContainer.getY();
@@ -821,9 +855,34 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float barBottom = AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight();
         final float acx = realW > 0f ? realX + realW / 2f : getWidth() / 2f;
         final float acy = realH > 0f ? realY + realH / 2f : barBottom + dp(54);
+        final float avatarRadius = realW > 0f && realH > 0f
+                ? Math.min(realW, realH) / 2f
+                : dp(ProfileActivity.isProfileV2Enabled() ? 54 : 48);
         final float viewBottom = Math.max(getHeight(), barBottom + dp(240));
 
         final float visibility = (1f - 0.92f * expandProgress) * (1f - actionBarProgress);
+
+        final long now = SystemClock.uptimeMillis();
+        final float dt = lastFrameTime == 0L ? 16f : Math.min(50f, Math.max(1f, now - lastFrameTime));
+        lastFrameTime = now;
+
+        updateMusicPulse(dt);
+        final boolean musicVisible = visibility > 0.001f
+                && (musicKick > 0.01f || musicLevel > 0.01f);
+
+        if (gifts.isEmpty()) {
+            // A musical profile should still breathe when there is nothing to orbit.
+            if (musicVisible) {
+                canvas.save();
+                canvas.clipRect(0, 0, getWidth(), viewBottom);
+                drawMusicVisualizer(canvas, acx, acy, avatarRadius, visibility);
+                canvas.restore();
+                if (isAttachedToWindow()) {
+                    postInvalidateOnAnimation();
+                }
+            }
+            return;
+        }
         if (visibility <= 0.001f) return;
 
         final float avatarSize = dp(ProfileActivity.isProfileV2Enabled() ? 108 : 96);
@@ -838,10 +897,6 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         lastAvatarWidth = avatarSize;
         lastAvatarHeight = avatarSize;
 
-        final long now = SystemClock.uptimeMillis();
-        final float dt = lastFrameTime == 0L ? 16f : Math.min(50f, Math.max(1f, now - lastFrameTime));
-        lastFrameTime = now;
-
         // Elastic follow of the dragged bubble: the sphere trails the finger a
         // little instead of being glued to it.
         if (draggingGift != null) {
@@ -855,20 +910,42 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (dragVelX * dragVelX + dragVelY * dragVelY > 0.0001f) {
                 dragStretchAngle = (float) Math.toDegrees(Math.atan2(dragVelY, dragVelX));
             }
+            // Holding the bubble almost still makes the other spheres swirl
+            // around the finger: the longer the hold, the stronger the vortex.
+            final float fingerSpeed = (float) Math.hypot(dragVelX, dragVelY);
+            if (fingerSpeed < 0.35f) {
+                dragHoldMs = Math.min(2400f, dragHoldMs + dt);
+            } else {
+                dragHoldMs = Math.max(0f, dragHoldMs - dt * 1.8f);
+            }
+            dragVortex += (Math.min(1f, dragHoldMs / 850f) - dragVortex)
+                    * (1f - (float) Math.exp(-dt / 120f));
         } else {
             dragStretch *= (float) Math.exp(-dt / 90f);
             dragLift += (1f - dragLift) * (1f - (float) Math.exp(-dt / 90f));
+            dragHoldMs = 0f;
+            dragVortex *= (float) Math.exp(-dt / 160f);
         }
 
         final float spinP = spinProgress(now);
         final float spin = spinOffset(spinP);
         final float gather = (float) Math.sin(spinP * Math.PI);
-
-        canvas.save();
-        canvas.clipRect(0, 0, getWidth(), viewBottom);
+        final boolean spinning = spinP > 0.0001f;
+        if (spinning && lastSpinProgress <= 0.0001f) {
+            // Fresh fling: drop the physical displacement, the ring has to be
+            // perfectly round for the "orbit around the avatar" illusion.
+            for (int i = 0; i < gifts.size(); i++) {
+                final Gift g = gifts.get(i);
+                g.physX = g.physY = g.velX = g.velY = 0f;
+            }
+        }
+        lastSpinProgress = spinP;
 
         final float t = (now - animationsStart) / 1000f;
+        final float musicScale = 1f + 0.055f * musicKick + 0.02f * musicLevel;
 
+        // Pass 1: layout targets. Nothing is drawn yet, so the physics pass
+        // below already sees this frame's positions of every single bubble.
         for (int i = 0; i < gifts.size(); ++i) {
             final Gift gift = gifts.get(i);
             final float enter = gift.animatedFloat != null ? gift.animatedFloat.set(1.0f) : 1f;
@@ -879,17 +956,29 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
             float distance = gift.orbitDistance;
             float scale = gift.orbitScale;
+            float front = 0f;
             if (gather > 0.001f) {
                 // On a fast release every bubble is pulled towards a compact
-                // ring around the avatar before flying back to its slot.
-                final float ring = avatarSize * 0.5f * (1.9f + 0.72f * (i % 5) / 4f);
-                distance = lerp(distance, ring, 0.72f * gather);
-                scale *= 1f + 0.10f * gather;
+                // ring around the avatar before flying back to its slot. The
+                // ring is close enough for the spheres to actually pass over
+                // the avatar, which is what enables the front/behind depth.
+                final float ring = avatarRadius * (1.04f + 0.34f * (i % 4) / 3f);
+                distance = lerp(distance, ring, 0.95f * gather);
+                scale *= 1f + 0.09f * gather;
             }
             final float angle = gift.orbitAngle + spin;
+            if (gather > 0.001f) {
+                // Positive sine = near half of the orbit = in front of the
+                // avatar, negative = the far half that passes behind it.
+                front = (float) Math.sin(angle) * gather;
+            }
 
             float gx = acx + (float) Math.cos(angle) * distance;
-            float gy = acy + (float) Math.sin(angle) * distance + hover;
+            // The orbit plane is tilted, so it projects to an ellipse while the
+            // spheres spin; at rest the layout is used untouched.
+            float gy = acy + (float) Math.sin(angle) * distance * (1f - 0.60f * gather) + hover;
+            gy += front * avatarRadius * 0.08f;
+            scale *= 1f + 0.13f * front;
             gift.baseCx = gx;
             gift.baseCy = gy;
 
@@ -927,19 +1016,57 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 }
             }
 
-            gift.lastCx = gx;
-            gift.lastCy = gy;
+            gift.drawX = gx;
+            gift.drawY = gy;
+            gift.drawScale = scale * musicScale;
+            gift.drawAlpha = visibility * enter * (1f - 0.14f * Math.max(0f, -front));
+            gift.drawGlow = glow + 0.6f * musicKick;
+            gift.drawFront = front;
+            gift.drawWiggle = wiggle + 0.05f * musicKick * (float) Math.sin(angle * 2.0);
+        }
 
-            if (gift == draggingGift) {
-                continue;
+        // Pass 2: physics. The orbit ring has to stay perfectly round, so the
+        // simulation is paused for the duration of the fling.
+        if (!spinning && DeltamentProfileMusic.isPhysicsEnabled()) {
+            updatePhysics(dt / 1000f, acx, acy, avatarRadius, spinning);
+        } else {
+            final float decay = (float) Math.exp(-dt / 90f);
+            for (int i = 0; i < gifts.size(); i++) {
+                final Gift g = gifts.get(i);
+                g.physX *= decay;
+                g.physY *= decay;
+                g.velX *= decay;
+                g.velY *= decay;
             }
-            gift.draw(canvas, gx, gy, scale, wiggle, visibility * enter, glow, 0f, 0f);
+        }
+
+        for (int i = 0; i < gifts.size(); i++) {
+            final Gift g = gifts.get(i);
+            if (g == draggingGift) continue;
+            g.drawX += g.physX;
+            g.drawY += g.physY;
+            g.lastCx = g.drawX;
+            g.lastCy = g.drawY;
+        }
+
+        canvas.save();
+        canvas.clipRect(0, 0, getWidth(), viewBottom);
+
+        if (musicVisible) {
+            drawMusicVisualizer(canvas, acx, acy, avatarRadius, visibility);
+        }
+
+        // Pass 3: draw back-to-front so overlapping spheres stack correctly.
+        // Bubbles on the far side of the orbit are clipped out of the avatar.
+        final int count = drawOrderForFrame();
+        for (int i = 0; i < count; i++) {
+            drawGiftWithDepth(canvas, drawOrder[i], acx, acy, avatarRadius);
         }
 
         if (draggingGift != null) {
             draggingGift.lastCx = dragRenderX;
             draggingGift.lastCy = dragRenderY;
-            draggingGift.draw(canvas, dragRenderX, dragRenderY, dragLift, 0f, 1f, 1.2f,
+            draggingGift.draw(canvas, dragRenderX, dragRenderY, dragLift * musicScale, 0f, 1f, 1.2f,
                     dragStretch, dragStretchAngle);
         }
 
@@ -948,6 +1075,240 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         if (isAttachedToWindow()) {
             postInvalidateOnAnimation();
         }
+    }
+
+    /** Builds the depth-sorted draw list of every bubble except the dragged one. */
+    private int drawOrderForFrame() {
+        int count = 0;
+        for (int i = 0; i < gifts.size(); i++) {
+            final Gift gift = gifts.get(i);
+            if (gift == draggingGift) continue;
+            if (count == drawOrder.length) {
+                final Gift[] bigger = new Gift[Math.max(4, drawOrder.length * 2)];
+                System.arraycopy(drawOrder, 0, bigger, 0, drawOrder.length);
+                drawOrder = bigger;
+            }
+            // Insertion sort, back-most first: at most six bubbles.
+            int j = count - 1;
+            while (j >= 0 && drawOrder[j].drawFront > gift.drawFront) {
+                drawOrder[j + 1] = drawOrder[j];
+                j--;
+            }
+            drawOrder[j + 1] = gift;
+            count++;
+        }
+        return count;
+    }
+
+    private void drawGiftWithDepth(Canvas canvas, Gift gift, float acx, float acy, float avatarRadius) {
+        final boolean behind = gift.drawFront < -0.02f;
+        if (behind) {
+            final float dx = gift.drawX - acx;
+            final float dy = gift.drawY - acy;
+            final float reach = avatarRadius + dp(27) * gift.drawScale;
+            if (dx * dx + dy * dy < reach * reach) {
+                // Draw into a layer and clear the avatar silhouette, so the
+                // sphere genuinely disappears behind the photo and reappears
+                // on the other side of the orbit.
+                depthLayerRect.set(
+                        gift.drawX - dp(80), gift.drawY - dp(80),
+                        gift.drawX + dp(80), gift.drawY + dp(80)
+                );
+                final int save = canvas.saveLayer(depthLayerRect, null);
+                gift.draw(canvas, gift.drawX, gift.drawY, gift.drawScale, gift.drawWiggle,
+                        gift.drawAlpha, gift.drawGlow, 0f, 0f);
+                canvas.drawCircle(acx, acy, avatarRadius, avatarMaskPaint);
+                canvas.restoreToCount(save);
+                return;
+            }
+        }
+        gift.draw(canvas, gift.drawX, gift.drawY, gift.drawScale, gift.drawWiggle,
+                gift.drawAlpha, gift.drawGlow, 0f, 0f);
+    }
+
+    private float giftCenterX(Gift gift) {
+        return gift == draggingGift ? dragRenderX : gift.drawX;
+    }
+
+    private float giftCenterY(Gift gift) {
+        return gift == draggingGift ? dragRenderY : gift.drawY;
+    }
+
+    /**
+     * Lightweight Verlet/spring simulation for the bubbles: collisions between
+     * spheres, repulsion when the finger pushes them, attraction towards the
+     * dragged bubble and a growing vortex while it is held still. The result is
+     * only a displacement from the layout slot, so the saved positions and the
+     * fling ring stay untouched.
+     */
+    private void updatePhysics(float dtSec, float acx, float acy, float avatarRadius, boolean spinning) {
+        final float step = Math.min(dtSec, 0.05f);
+        if (step <= 0f) return;
+
+        final float bubbleRadius = dp(27);
+        final float minDist = bubbleRadius * 1.92f;
+        final float springK = draggingGift != null ? 9f : 18f;
+        final float damping = (float) Math.exp(-step * 4.5f);
+        final float maxSpeed = dp(2600);
+        final float maxOffset = dp(92);
+        final int n = gifts.size();
+
+        for (int i = 0; i < n; i++) {
+            final Gift gift = gifts.get(i);
+            if (gift == draggingGift) {
+                gift.physX = gift.physY = gift.velX = gift.velY = 0f;
+                continue;
+            }
+            float ax = -springK * gift.physX;
+            float ay = -springK * gift.physY;
+
+            // Never drift onto the avatar unless it is orbiting it.
+            if (!spinning) {
+                final float dx = gift.drawX - acx;
+                final float dy = gift.drawY - acy;
+                final float d = (float) Math.hypot(dx, dy);
+                final float keep = avatarRadius + bubbleRadius * 0.92f;
+                if (d > 0.01f && d < keep) {
+                    final float push = (keep - d) * 1400f;
+                    ax += dx / d * push;
+                    ay += dy / d * push;
+                }
+            }
+
+            // Finger: attraction, hard push when too close, tangential swirl.
+            if (draggingGift != null) {
+                final float dx = dragRenderX - gift.drawX;
+                final float dy = dragRenderY - gift.drawY;
+                final float d = (float) Math.hypot(dx, dy);
+                final float range = dp(190);
+                if (d > 0.01f && d < range) {
+                    final float nx = dx / d;
+                    final float ny = dy / d;
+                    final float falloff = 1f - d / range;
+                    final float radial = d < minDist
+                            ? -((minDist - d) / minDist) * 3600f
+                            : 2200f;
+                    ax += nx * radial * falloff;
+                    ay += ny * radial * falloff;
+                    final float swirl = dragVortex * 2600f * falloff;
+                    ax -= ny * swirl;
+                    ay += nx * swirl;
+                }
+            }
+
+            // Sphere <-> sphere collisions.
+            for (int j = 0; j < n; j++) {
+                if (j == i) continue;
+                final Gift other = gifts.get(j);
+                final float dx = gift.drawX - giftCenterX(other);
+                final float dy = gift.drawY - giftCenterY(other);
+                final float d = (float) Math.hypot(dx, dy);
+                if (d > 0.01f && d < minDist) {
+                    final float overlap = (minDist - d) / minDist;
+                    ax += dx / d * overlap * 3000f;
+                    ay += dy / d * overlap * 3000f;
+                }
+            }
+
+            gift.velX = (gift.velX + ax * step) * damping;
+            gift.velY = (gift.velY + ay * step) * damping;
+            final float speed = (float) Math.hypot(gift.velX, gift.velY);
+            if (speed > maxSpeed) {
+                gift.velX = gift.velX / speed * maxSpeed;
+                gift.velY = gift.velY / speed * maxSpeed;
+            }
+            gift.physX = clamp(gift.physX + gift.velX * step, -maxOffset, maxOffset);
+            gift.physY = clamp(gift.physY + gift.velY * step, -maxOffset, maxOffset);
+            if (Math.abs(gift.physX) >= maxOffset) gift.velX *= -0.35f;
+            if (Math.abs(gift.physY) >= maxOffset) gift.velY *= -0.35f;
+        }
+    }
+
+    /** Smooths the analytic beat clock so the visuals never jitter. */
+    private void updateMusicPulse(float dt) {
+        musicTime += dt / 1000f;
+        final float beat = DeltamentProfileMusic.getBeat();
+        final float level = DeltamentProfileMusic.getLevel();
+        if (beat >= musicKick) {
+            musicKick = beat;
+        } else {
+            musicKick = Math.max(0f, musicKick - dt / 240f);
+        }
+        musicLevel += (level - musicLevel) * (1f - (float) Math.exp(-dt / 150f));
+    }
+
+    /** Radial equalizer and bloom around the avatar while the track plays. */
+    private void drawMusicVisualizer(Canvas canvas, float acx, float acy, float avatarRadius, float visibility) {
+        if (avatarRadius <= 0f) return;
+
+        final int skin = DeltamentBubbleSkins.get();
+        final int accent = DeltamentBubbleSkins.isDefault(skin) ? 0xFFFFFFFF : DeltamentBubbleSkins.accent(skin);
+        ensureMusicGlowShader(avatarRadius, accent);
+
+        final float kick = musicKick;
+        final float level = musicLevel;
+
+        canvas.save();
+        canvas.translate(acx, acy);
+        musicGlowPaint.setShader(musicGlowShader);
+        musicGlowPaint.setAlpha((int) ((46f + 104f * kick) * visibility * Math.min(1f, level * 1.6f)));
+        canvas.drawCircle(0, 0, avatarRadius * 1.8f, musicGlowPaint);
+        canvas.restore();
+
+        musicBarPaint.setStyle(Paint.Style.STROKE);
+        musicBarPaint.setStrokeCap(Paint.Cap.ROUND);
+
+        // Thin ring hugging the avatar, pulsing with the downbeat.
+        musicBarPaint.setStrokeWidth(dp(1.4f));
+        musicBarPaint.setColor(accent);
+        musicBarPaint.setAlpha((int) ((34f + 120f * kick) * visibility));
+        canvas.drawCircle(acx, acy, avatarRadius * (1.015f + 0.035f * kick), musicBarPaint);
+
+        // Rotating bars.
+        final int bars = 54;
+        final float inner = avatarRadius * 1.12f;
+        final float maxLen = dp(15);
+        musicBarPaint.setStrokeWidth(dp(2.1f));
+        musicBarPaint.setAlpha((int) (150f * visibility * Math.min(1f, 0.25f + level)));
+        canvas.save();
+        canvas.rotate(musicTime * 16f, acx, acy);
+        for (int i = 0; i < bars; i++) {
+            final float a = (float) (i * Math.PI * 2.0 / bars);
+            final float shapeA = 0.5f + 0.5f * (float) Math.sin(i * 1.93f + musicTime * 3.6f);
+            final float shapeB = 0.5f + 0.5f * (float) Math.cos(i * 0.71f - musicTime * 2.2f);
+            final float len = dp(1.5f)
+                    + maxLen * (0.16f + 0.62f * level) * (0.3f + 0.7f * shapeA * shapeB)
+                    + maxLen * 0.5f * kick * shapeA;
+            final float cos = (float) Math.cos(a);
+            final float sin = (float) Math.sin(a);
+            canvas.drawLine(
+                    acx + cos * inner, acy + sin * inner,
+                    acx + cos * (inner + len), acy + sin * (inner + len),
+                    musicBarPaint
+            );
+        }
+        canvas.restore();
+    }
+
+    private void ensureMusicGlowShader(float radius, int accent) {
+        if (musicGlowShader != null && Math.abs(musicGlowRadius - radius) < 0.5f
+                && musicGlowAccent == accent) {
+            return;
+        }
+        musicGlowRadius = radius;
+        musicGlowAccent = accent;
+        final float outer = radius * 1.8f;
+        musicGlowShader = new RadialGradient(
+                0, 0, outer,
+                new int[]{
+                        0x00000000,
+                        0x00000000,
+                        Theme.multAlpha(accent, 0.42f),
+                        Theme.multAlpha(accent, 0.0f)
+                },
+                new float[]{0f, 0.52f, 0.74f, 1f},
+                Shader.TileMode.CLAMP
+        );
     }
 
     private static float easeOutCubic(float p) {
@@ -1257,6 +1618,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         dragLift = 1f;
         dragStretch = 0f;
         dragVelX = dragVelY = 0f;
+        dragHoldMs = 0f;
+        dragVortex = 0f;
+        gift.physX = gift.physY = gift.velX = gift.velY = 0f;
         lastMoveX = downX;
         lastMoveY = downY;
         lastMoveTime = SystemClock.uptimeMillis();
@@ -1310,8 +1674,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     /** Fast release: all bubbles gather around the avatar and orbit it. */
     private void startFlingSpin(float speed, float vx, float vy) {
         flingSpinStart = SystemClock.uptimeMillis();
-        flingSpinDuration = 2800L;
+        flingSpinDuration = 3000L;
         flingSpinTurns = speed > dp(2600) ? 3 : (speed > dp(1400) ? 2 : 1);
+        lastSpinProgress = 0f;
         final float direction = Math.abs(vx) > dp(120) ? vx : vy;
         flingSpinDir = direction >= 0f ? 1 : -1;
         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);

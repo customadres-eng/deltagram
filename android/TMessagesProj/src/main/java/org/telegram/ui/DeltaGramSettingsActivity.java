@@ -36,6 +36,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
 import org.telegram.ui.Stars.DeltamentBubbleSkins;
+import org.telegram.ui.Stars.DeltamentProfileMusic;
 import org.telegram.ui.Stars.ProfileGiftsView;
 import org.telegram.ui.Wallet.DeltamentCardSettingsActivity;
 import org.telegram.ui.Wallet.DeltamentDomainsActivity;
@@ -304,6 +305,18 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 DeltamentBubbleSkins.name(DeltamentBubbleSkins.get()), R.drawable.msg_customize,
                 v -> showBubbleSkinDialog());
         bubbleSkinValueView = lastValueView;
+
+        addSwitch(content, "Физика пузырей",
+                "Столкновения, отталкивание и вихрь вокруг пальца при перетаскивании подарков",
+                DeltamentProfileMusic.isPhysicsEnabled(), (view, checked) ->
+                        DeltamentProfileMusic.setPhysicsEnabled(checked));
+        addSwitch(content, "Музыкальный профиль",
+                "Пузыри и эквалайзер вокруг аватара пульсируют в такт музыке DeltaGram",
+                DeltamentProfileMusic.isMusicEnabled(), (view, checked) -> {
+                    DeltamentProfileMusic.setMusicEnabled(checked);
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                            checked ? "Музыкальный профиль включён" : "Музыкальный профиль выключен").show();
+                });
     }
 
     private void buildChats(LinearLayout content) {

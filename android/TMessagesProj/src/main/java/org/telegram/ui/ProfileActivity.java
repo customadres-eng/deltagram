@@ -272,8 +272,10 @@ import org.telegram.ui.Components.Premium.boosts.UserSelectorBottomSheet;
 import org.telegram.ui.Components.ProfileGalleryView;
 import org.telegram.ui.Components.ProfileGooeyView;
 import org.telegram.ui.Components.ProfileMusicView;
+import org.telegram.ui.Wallet.DeltamentMusicPlayer;
 import org.telegram.ui.Wallet.DeltamentMusicPlayerFragment;
 import org.telegram.ui.Wallet.DeltamentMusicSheet;
+import org.telegram.ui.Wallet.DeltamentSoundCloudClient;
 import org.telegram.ui.Components.ProfileBalanceView;
 import org.telegram.ui.Wallet.GramWallet;
 import org.telegram.ui.Wallet.ProfileWalletCardDialog;
@@ -405,6 +407,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private ProfileActionsView actionsView;
     private MessagesController.SavedMusicList savedMusicList;
     private ProfileMusicView musicView;
+    private DeltamentMusicPlayer.Listener profileMusicListener;
     private ProfileBalanceView balanceView;
     private AnimatedStatusView animatedStatusView;
     private AvatarImageView avatarImage;
@@ -2341,6 +2344,21 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         getNotificationCenter().addObserver(this, NotificationCenter.profileMusicUpdated);
         getNotificationCenter().addObserver(this, NotificationCenter.updatedChatRanks);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
+
+        // DeltaGram: mirror the track that the built-in player is streaming in
+        // the profile music pill, so the header really is "musical".
+        profileMusicListener = new DeltamentMusicPlayer.Listener() {
+            @Override
+            public void onTrackChanged(DeltamentSoundCloudClient.Track track) {
+                AndroidUtilities.runOnUIThread(ProfileActivity.this::updateMusicPill);
+            }
+
+            @Override
+            public void onPlaybackStateChanged(boolean playing, boolean prepared) {
+                AndroidUtilities.runOnUIThread(ProfileActivity.this::updateMusicPill);
+            }
+        };
+        DeltamentMusicPlayer.getInstance().addListener(profileMusicListener);
         updateRowsIds();
         if (listAdapter != null) {
             listAdapter.notifyDataSetChanged();
@@ -2491,6 +2509,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         getNotificationCenter().removeObserver(this, NotificationCenter.profileMusicUpdated);
         getNotificationCenter().removeObserver(this, NotificationCenter.updatedChatRanks);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
+        if (profileMusicListener != null) {
+            DeltamentMusicPlayer.getInstance().removeListener(profileMusicListener);
+            profileMusicListener = null;
+        }
         if (avatarsViewPager != null) {
             avatarsViewPager.onDestroy();
         }
@@ -11300,15 +11322,28 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             actionsView.set(ProfileActionsView.KEY_JOIN, hasJoinRow);
         }
         if (musicView != null) {
-            if (userInfo != null && userInfo.saved_music != null) {
-                musicView.setMusicDocument(userInfo.saved_music);
-            } else {
-                musicView.setText("DeltaGram Music", " — плейлист профиля");
-            }
+            updateMusicPill();
             musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
             updateCardsBalance();
             musicView.invalidate();
             balanceView.invalidate();
+        }
+    }
+
+    /** Shows the DeltaGram player track (if any) in the profile music pill. */
+    private void updateMusicPill() {
+        if (musicView == null) {
+            return;
+        }
+        final DeltamentSoundCloudClient.Track track = DeltamentMusicPlayer.getInstance().currentTrack;
+        if (track != null) {
+            final String artist = TextUtils.isEmpty(track.artist) ? "DeltaGram Music" : track.artist;
+            final String title = TextUtils.isEmpty(track.title) ? "" : " — " + track.title;
+            musicView.setText(artist, title);
+        } else if (userInfo != null && userInfo.saved_music != null) {
+            musicView.setMusicDocument(userInfo.saved_music);
+        } else {
+            musicView.setText("DeltaGram Music", " — плейлист профиля");
         }
     }
 
