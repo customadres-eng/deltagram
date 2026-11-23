@@ -317,6 +317,13 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                     BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
                             checked ? "Музыкальный профиль включён" : "Музыкальный профиль выключен").show();
                 });
+        addSwitch(content, "Мяууу",
+                "Летающая моделька вокруг профиля: иногда она обращает внимание на подарки в пузырях",
+                DeltamentProfileMusic.isCatEnabled(), (view, checked) -> {
+                    DeltamentProfileMusic.setCatEnabled(checked);
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                            checked ? "Мяууу прилетела на профиль" : "Мяууу улетела").show();
+                });
     }
 
     private void buildChats(LinearLayout content) {

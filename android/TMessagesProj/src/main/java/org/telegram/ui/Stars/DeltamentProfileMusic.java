@@ -21,8 +21,18 @@ public final class DeltamentProfileMusic {
     private static final String PREF_MUSIC = "dg_profile_music";
     /** Collisions / repulsion / finger vortex for the gift bubbles. */
     private static final String PREF_PHYSICS = "dg_bubble_physics";
+    /** The "Мяууу" companion that flies around the profile. */
+    private static final String PREF_CAT = "dg_profile_cat";
 
     private DeltamentProfileMusic() {
+    }
+
+    public static boolean isCatEnabled() {
+        return MessagesController.getGlobalMainSettings().getBoolean(PREF_CAT, false);
+    }
+
+    public static void setCatEnabled(boolean enabled) {
+        MessagesController.getGlobalMainSettings().edit().putBoolean(PREF_CAT, enabled).apply();
     }
 
     public static boolean isMusicEnabled() {
