@@ -1322,7 +1322,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             return true;
         }
         final long last = prefs.getLong(dailyKey(), 0L);
-        return last <= 0L || Math.abs(System.currentTimeMillis() - last) >= 12L * 60L * 60L * 1000L;
+        // The repeat interval is user-configurable (minutes), default 12 h.
+        final long interval = DeltamentProfileMusic.getGiftOfDayIntervalMinutes() * 60_000L;
+        return last <= 0L || Math.abs(System.currentTimeMillis() - last) >= interval;
     }
 
     private void markDailyShown() {
@@ -2621,8 +2623,14 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
 
         final float w = Math.max(getWidth(), 1);
-        final float h = Math.max(headerBottom, dp(240));
         final float radius = avatarSize / 2f;
+        // On someone else's profile the collection must stay in the header band
+        // around the avatar: it used to be scattered over the whole page, on top
+        // of the bio, the gift cards and the "send gift" button. Only the owner
+        // gets the full-page spread, because only the owner can rearrange it.
+        final float ownerBottom = headerBottom;
+        final float foreignBottom = acy + radius + dp(180);
+        final float h = Math.max(canDrag ? ownerBottom : Math.min(ownerBottom, foreignBottom), dp(240));
         final float item = dp(52);
         final float pad = dp(6);
         final float minDistance = dp(58);

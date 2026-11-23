@@ -5,6 +5,7 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -32,6 +33,7 @@ import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
@@ -65,6 +67,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     private int page;
     private TextView lastValueView;
     private TextView bubbleSkinValueView;
+    private TextView giftIntervalValueView;
 
     public DeltaGramSettingsActivity() {
         this(PAGE_MAIN);
@@ -325,12 +328,17 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                             checked ? "Мяууу прилетела на профиль" : "Мяууу улетела").show();
                 });
         addSwitch(content, "Подарок дня",
-                "Мяууу раз в сутки приносит один закреплённый подарок в центр профиля и показывает карточку. Тап по Мяууу — повторить",
+                "Мяууу приносит один закреплённый подарок в центр профиля и показывает карточку. Тап по Мяууу — повторить сразу",
                 DeltamentProfileMusic.isGiftOfDayEnabled(), (view, checked) -> {
                     DeltamentProfileMusic.setGiftOfDayEnabled(checked);
                     BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
                             checked ? "Мяууу-почтальон включён" : "Подарок дня выключен").show();
                 });
+        addAction(content, "Как часто приносить",
+                "Интервал между появлениями Мяууу с подарком: от 5 минут до 7 дней",
+                giftIntervalLabel(DeltamentProfileMusic.getGiftOfDayIntervalMinutes()),
+                R.drawable.msg_calendar2, v -> showGiftIntervalDialog());
+        giftIntervalValueView = lastValueView;
         addSwitch(content, "Живые созвездия",
                 "Соединяй подарки светящимися нитями: кнопка-звезда в правом нижнем углу профиля",
                 DeltamentProfileMusic.isConstellationsEnabled(), (view, checked) -> {
@@ -481,6 +489,109 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         builder.show();
+    }
+
+    // ---- "Подарок дня": repeat interval -------------------------------------
+
+    /** Short human label for the ritual interval, e.g. "раз в 12 часов". */
+    private String giftIntervalLabel(int minutes) {
+        if (minutes >= 1440 && minutes % 1440 == 0) {
+            final int days = minutes / 1440;
+            return "раз в " + days + " " + plural(days, "день", "дня", "дней");
+        }
+        if (minutes >= 60 && minutes % 60 == 0) {
+            final int hours = minutes / 60;
+            return "раз в " + hours + " " + plural(hours, "час", "часа", "часов");
+        }
+        if (minutes < 60) {
+            return "каждые " + minutes + " мин";
+        }
+        return "раз в " + (minutes / 60) + " ч " + (minutes % 60) + " мин";
+    }
+
+    private static String plural(int value, String one, String few, String many) {
+        final int m10 = value % 10;
+        final int m100 = value % 100;
+        if (m10 == 1 && m100 != 11) {
+            return one;
+        }
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) {
+            return few;
+        }
+        return many;
+    }
+
+    private void showGiftIntervalDialog() {
+        final int[] presets = {15, 30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 10080};
+        final CharSequence[] labels = new CharSequence[presets.length + 1];
+        for (int i = 0; i < presets.length; i++) {
+            labels[i] = giftIntervalLabel(presets[i]);
+        }
+        labels[presets.length] = "Свой интервал…";
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Как часто приносить подарок");
+        builder.setItems(labels, (dialog, which) -> {
+            if (which == presets.length) {
+                showGiftIntervalCustomDialog();
+            } else {
+                applyGiftInterval(presets[which]);
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void showGiftIntervalCustomDialog() {
+        final Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        final FrameLayout container = new FrameLayout(context);
+        container.setPadding(dp(24), dp(10), dp(24), 0);
+        final EditTextBoldCursor editText = new EditTextBoldCursor(context);
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
+        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        editText.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        editText.setHint("Минуты, например 45");
+        editText.setInputType(InputType.TYPE_CLASS_NUMBER);
+        editText.setBackgroundDrawable(Theme.createEditTextDrawable(context, true));
+        editText.setText(String.valueOf(DeltamentProfileMusic.getGiftOfDayIntervalMinutes()));
+        editText.setSelection(editText.length());
+        container.addView(editText,
+                LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.LEFT | Gravity.TOP));
+        final AlertDialog.Builder builder = new AlertDialog.Builder(context, getResourceProvider());
+        builder.setTitle("Свой интервал");
+        builder.setMessage("Сколько минут между появлениями Мяууу? От "
+                + DeltamentProfileMusic.GIFT_INTERVAL_MIN + " минут до 7 дней");
+        builder.setView(container);
+        builder.setPositiveButton("Готово", (dialog, which) -> {
+            final int minutes;
+            try {
+                minutes = Integer.parseInt(editText.getText().toString().trim());
+            } catch (NumberFormatException e) {
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Введи число минут").show();
+                return;
+            }
+            if (minutes < DeltamentProfileMusic.GIFT_INTERVAL_MIN
+                    || minutes > DeltamentProfileMusic.GIFT_INTERVAL_MAX) {
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                        "Допустимо от " + DeltamentProfileMusic.GIFT_INTERVAL_MIN + " минут до 7 дней").show();
+                return;
+            }
+            applyGiftInterval(minutes);
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void applyGiftInterval(int minutes) {
+        DeltamentProfileMusic.setGiftOfDayIntervalMinutes(minutes);
+        final int applied = DeltamentProfileMusic.getGiftOfDayIntervalMinutes();
+        if (giftIntervalValueView != null) {
+            giftIntervalValueView.setText(giftIntervalLabel(applied));
+        }
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                "Мяууу будет приносить подарок " + giftIntervalLabel(applied)).show();
     }
 
     private void showSwipeActionDialog() {

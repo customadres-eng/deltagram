@@ -23,10 +23,17 @@ public final class DeltamentProfileMusic {
     private static final String PREF_PHYSICS = "dg_bubble_physics";
     /** The "Мяууу" companion that flies around the profile. */
     private static final String PREF_CAT = "dg_profile_cat";
-    /** Paimon brings one pinned gift to the centre once a day. */
+    /** Paimon brings one pinned gift to the centre once in a while. */
     private static final String PREF_GIFT_OF_DAY = "dg_gift_of_day";
+    /** How often the "gift of the day" ritual repeats, in minutes. */
+    private static final String PREF_GIFT_INTERVAL = "dg_gift_of_day_interval";
     /** User-drawn glowing links between the gift bubbles. */
     private static final String PREF_CONSTELLATIONS = "dg_profile_constellations";
+
+    /** Default repeat time of the ritual: twice a day. */
+    public static final int GIFT_INTERVAL_DEFAULT = 12 * 60;
+    public static final int GIFT_INTERVAL_MIN = 5;
+    public static final int GIFT_INTERVAL_MAX = 7 * 24 * 60;
 
     private DeltamentProfileMusic() {
     }
@@ -53,6 +60,26 @@ public final class DeltamentProfileMusic {
 
     public static void setGiftOfDayEnabled(boolean enabled) {
         MessagesController.getGlobalMainSettings().edit().putBoolean(PREF_GIFT_OF_DAY, enabled).apply();
+    }
+
+    /** Repeat interval of the ritual, in minutes, clamped to a sane range. */
+    public static int getGiftOfDayIntervalMinutes() {
+        int minutes = MessagesController.getGlobalMainSettings()
+                .getInt(PREF_GIFT_INTERVAL, GIFT_INTERVAL_DEFAULT);
+        if (minutes < GIFT_INTERVAL_MIN || minutes > GIFT_INTERVAL_MAX) {
+            minutes = GIFT_INTERVAL_DEFAULT;
+        }
+        return minutes;
+    }
+
+    public static void setGiftOfDayIntervalMinutes(int minutes) {
+        if (minutes < GIFT_INTERVAL_MIN) {
+            minutes = GIFT_INTERVAL_MIN;
+        } else if (minutes > GIFT_INTERVAL_MAX) {
+            minutes = GIFT_INTERVAL_MAX;
+        }
+        MessagesController.getGlobalMainSettings().edit()
+                .putInt(PREF_GIFT_INTERVAL, minutes).apply();
     }
 
     public static boolean isConstellationsEnabled() {
