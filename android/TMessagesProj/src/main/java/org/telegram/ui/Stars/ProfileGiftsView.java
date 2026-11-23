@@ -23,6 +23,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.os.SystemClock;
+import android.text.format.DateFormat;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -38,6 +39,7 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.tgnet.TLRPC;
@@ -107,6 +109,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private static final int CAT_WANDER = 0;
     private static final int CAT_TO_GIFT = 1;
     private static final int CAT_LOOK = 2;
+    /** Carrying the "gift of the day" to the centre. */
+    private static final int CAT_CARRY = 3;
+    /** Holding the gift in the centre while its card is shown. */
+    private static final int CAT_SHOWCASE = 4;
+    /** Flying the gift back to its own slot. */
+    private static final int CAT_RETURN = 5;
 
     private Bitmap catFlySheet, catHappySheet, catSurprisedSheet;
     private boolean catLoadFailed;
@@ -130,6 +138,46 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private long catFlyStart;
     private Gift catGift;
     private final Random catRandom = new Random();
+
+    /**
+     * "Мяууу-почтальон" ("gift of the day"): once a day the companion takes
+     * one pinned gift, carries it above the avatar and shows a collectible card
+     * with its title, number and date, then returns the gift to its own slot.
+     */
+    private Gift heldGift;
+    private long heldAt;
+    private long showcaseUntil;
+    private long dailyCheckAt;
+    private long dailyAttemptAt;
+    private boolean pendingCarry;
+    private boolean catTapPending;
+    private String heldSender;
+    private float cardAlpha;
+    private final Paint cardPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cardTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cardSubPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cardAccentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF cardRect = new RectF();
+    private final Path cardPath = new Path();
+
+    /** User-drawn "living constellations" between gift bubbles. */
+    private final ArrayList<long[]> constellations = new ArrayList<>();
+    private boolean constellationsLoaded;
+    private boolean consEdit;
+    private Gift consFrom;
+    private float consTouchX, consTouchY;
+    private boolean consTapEmpty;
+    private float consButtonX, consButtonY, consButtonR = dp(19);
+    private long consHintStart;
+    private boolean consHintShown;
+    private final Path linkPath = new Path();
+    private final Paint linkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint linkGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint consUiPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint consTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path consStarPath = new Path();
+    /** Visible constellation toggle, computed in the draw pass for hit-testing. */
+    private boolean consButtonVisible;
 
     /** Positions are re-generated from a stable seed, like Telegram for iOS does. */
     private final Random bubbleRandom = new Random(System.currentTimeMillis() / 1000L);
@@ -162,6 +210,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     private float dragVelX, dragVelY;
     private float lastMoveX, lastMoveY;
     private long lastMoveTime;
+    private long dragStartTime;
     private long lastFrameTime;
     private VelocityTracker velocityTracker;
     /** Release velocity, px per second. */
@@ -303,9 +352,19 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         musicKick = musicLevel = 0f;
         catAttention = 0f;
         catGift = null;
+        heldGift = null;
+        heldSender = null;
+        cardAlpha = 0f;
+        showcaseUntil = 0L;
+        pendingCarry = false;
+        catTapPending = false;
+        dailyCheckAt = 0L;
+        dailyAttemptAt = 0L;
         catState = CAT_WANDER;
         catInitialized = false;
         catAlpha = 0f;
+        consEdit = false;
+        consFrom = null;
         releaseCat();
 
         for (Gift gift : gifts) {
@@ -391,6 +450,21 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float w = Math.max(getWidth(), dp(200));
         final float top = catTop();
         final float bottom = catBottom(viewBottom);
+        ensureConstellationsLoaded();
+        if (DeltamentProfileMusic.isConstellationsEnabled() && !constellations.isEmpty()
+                && catRandom.nextFloat() < 0.35f) {
+            // Sometimes Paimon flies along a user-drawn constellation instead of
+            // a random point, which makes the links feel alive.
+            final long[] link = constellations.get(catRandom.nextInt(constellations.size()));
+            final Gift target = catRandom.nextBoolean() ? findGiftById(link[0]) : findGiftById(link[1]);
+            if (target != null) {
+                catTargetX = clamp(target.drawX + (catRandom.nextFloat() - 0.5f) * dp(36),
+                        dp(18), w - dp(18));
+                catTargetY = clamp(target.drawY + (catRandom.nextFloat() - 0.5f) * dp(36), top, bottom);
+                catRetargetAt = now + 2200L + catRandom.nextInt(2600);
+                return;
+            }
+        }
         if (catRandom.nextFloat() < 0.45f) {
             final double angle = catRandom.nextDouble() * Math.PI * 2.0;
             final float distance = avatarRadius * (1.3f + catRandom.nextFloat() * 0.8f);
@@ -458,11 +532,21 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         catBob += dt / 1000f;
         catAlpha += ((visibility > 0.12f ? 1f : 0f) - catAlpha) * (1f - (float) Math.exp(-dt / 260f));
 
-        if (catGift == draggingGift) {
+        if (catGift != null && catGift == draggingGift) {
             catGift = null;
-            catState = CAT_WANDER;
+            cancelGiftOfDay();
             chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
         }
+        if (dailyCheckAt == 0L) {
+            dailyCheckAt = now + 2400L;
+        }
+        if (heldGift != null && !gifts.contains(heldGift)) {
+            cancelGiftOfDay();
+            chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+        }
+
+        final float carryX = acx;
+        final float carryY = Math.max(catTop() + dp(6), acy - avatarRadius - dp(40));
 
         if (catState == CAT_LOOK) {
             if (catGift == null || !gifts.contains(catGift) || now >= catLookEnd) {
@@ -474,6 +558,24 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             if (catGift == null || !gifts.contains(catGift)) {
                 catState = CAT_WANDER;
                 catGift = null;
+                pendingCarry = false;
+                chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            }
+        } else if (catState == CAT_CARRY) {
+            if (heldGift == null) {
+                cancelGiftOfDay();
+                chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            }
+        } else if (catState == CAT_SHOWCASE) {
+            if (heldGift == null) {
+                cancelGiftOfDay();
+                chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            } else if (now >= showcaseUntil) {
+                catState = CAT_RETURN;
+            }
+        } else if (catState == CAT_RETURN) {
+            if (heldGift == null) {
+                cancelGiftOfDay();
                 chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
             }
         } else {
@@ -491,9 +593,18 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                     catNextLookAt = now + 5000L;
                 }
             }
+            maybeStartDailyGift(now, avatarRadius);
         }
 
-        if (catGift != null) {
+        if (catState == CAT_CARRY || catState == CAT_SHOWCASE) {
+            catTargetX = carryX;
+            catTargetY = carryY;
+        } else if (catState == CAT_RETURN && heldGift != null) {
+            // Land exactly on the bubble's own slot, so the gift can be
+            // released without it visually jumping anywhere.
+            catTargetX = heldGift.drawX;
+            catTargetY = heldGift.drawY - dp(23);
+        } else if (catGift != null) {
             catTargetX = catSpotX(catGift, acx, acy);
             catTargetY = catSpotY(catGift, acx, acy);
             if (catState == CAT_LOOK) {
@@ -512,19 +623,26 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             // Hover next to the gift instead of freezing in place.
             ty += (float) Math.sin(catBob * 2.2f) * dp(2.6f);
             tx += (float) Math.cos(catBob * 1.7f) * dp(1.6f);
+        } else if (catState == CAT_SHOWCASE) {
+            // Gentle "showing it to you" bob while the card is open.
+            ty += (float) Math.sin(catBob * 1.9f) * dp(3.2f);
+            tx += (float) Math.cos(catBob * 1.3f) * dp(1.4f);
         }
 
         final float dx = tx - catX;
         final float dy = ty - catY;
         final float distance = (float) Math.hypot(dx, dy);
-        final float speed = catState == CAT_TO_GIFT ? dpf2(150)
+        final float speed = catState == CAT_TO_GIFT || catState == CAT_CARRY ? dpf2(165)
+                : catState == CAT_RETURN ? dpf2(150)
+                : catState == CAT_SHOWCASE ? dpf2(0)
                 : catState == CAT_LOOK ? dpf2(26) : dpf2(62);
         float desiredVX = 0f, desiredVY = 0f;
-        if (distance > 0.5f) {
+        if (distance > 0.5f && speed > 0f) {
             desiredVX = dx / distance * speed;
             desiredVY = dy / distance * speed;
         }
-        final float steer = 1f - (float) Math.exp(-dt / (catState == CAT_LOOK ? 300f : 210f));
+        final float steer = 1f - (float) Math.exp(-dt
+                / (catState == CAT_LOOK || catState == CAT_SHOWCASE ? 300f : 210f));
         catVX += (desiredVX - catVX) * steer;
         catVY += (desiredVY - catVY) * steer;
         catX += catVX * dt / 1000f;
@@ -545,7 +663,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             catVY = -Math.abs(catVY) * 0.35f;
         }
 
-        if (catState == CAT_WANDER && Math.abs(catVX) > dp(6)) {
+        if ((catState == CAT_WANDER || catState == CAT_CARRY || catState == CAT_RETURN)
+                && Math.abs(catVX) > dp(6)) {
             catFacingTarget = catVX > 0f ? 1f : -1f;
         }
         catFacing += (catFacingTarget - catFacing) * (1f - (float) Math.exp(-dt / 150f));
@@ -556,16 +675,61 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                         ? (catGift.drawX >= catX ? 8f : -8f) : 0f);
         catTilt += (tiltTarget - catTilt) * (1f - (float) Math.exp(-dt / 200f));
 
-        final float attentionTarget = catState == CAT_LOOK && catGift != null ? 1f : 0f;
+        final boolean attentive = (catState == CAT_LOOK || catState == CAT_CARRY
+                || catState == CAT_SHOWCASE || catState == CAT_RETURN) && catGift != null;
+        final float attentionTarget = attentive ? 1f : 0f;
         catAttention += (attentionTarget - catAttention) * (1f - (float) Math.exp(-dt / 240f));
 
         if (catState == CAT_TO_GIFT && catGift != null && distance < dp(6)) {
-            catState = CAT_LOOK;
-            catLookStart = now;
-            catLookEnd = now + 2600L + catRandom.nextInt(1500);
-            catNextLookAt = now + 9000L + catRandom.nextInt(7000);
+            if (pendingCarry) {
+                pendingCarry = false;
+                heldGift = catGift;
+                heldAt = now;
+                heldSender = resolveSender(heldGift);
+                showcaseUntil = 0L;
+                catState = CAT_CARRY;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            } else {
+                catState = CAT_LOOK;
+                catLookStart = now;
+                catLookEnd = now + 2600L + catRandom.nextInt(1500);
+                catNextLookAt = now + 9000L + catRandom.nextInt(7000);
+            }
+        } else if (catState == CAT_CARRY && distance < dp(7)) {
+            catState = CAT_SHOWCASE;
+            showcaseUntil = now + 5400L;
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        } else if (catState == CAT_RETURN && distance < dp(9)) {
+            heldGift = null;
+            heldSender = null;
+            catGift = null;
+            catState = CAT_WANDER;
+            chooseCatWanderTarget(now, acx, acy, avatarRadius, viewBottom);
+            catNextLookAt = now + 14000L + catRandom.nextInt(9000);
         }
     }
+
+    /** Once a day, Paimon offers one pinned gift to the owner of the profile. */
+    private void maybeStartDailyGift(long now, float avatarRadius) {
+        if (!canDrag || heldGift != null || catState != CAT_WANDER
+                || gifts.isEmpty() || catAlpha < 0.65f
+                || !DeltamentProfileMusic.isGiftOfDayEnabled()) {
+            return;
+        }
+        if (draggingGift != null) {
+            dailyCheckAt = now + 1500L;
+            return;
+        }
+        if (now < dailyCheckAt) {
+            return;
+        }
+        dailyCheckAt = now + 2000L;
+        if (!shouldShowDailyGift()) {
+            return;
+        }
+        startGiftOfDay(now, false);
+    }
+
 
     private void drawCat(Canvas canvas, long now, float visibility) {
         if (catFlySheet == null || catHappySheet == null || catSurprisedSheet == null
@@ -575,7 +739,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         final Bitmap sheet;
         final int frame;
-        if (catState == CAT_LOOK && catGift != null) {
+        if (catState == CAT_SHOWCASE) {
+            sheet = catHappySheet;
+            frame = (int) ((Math.max(0L, now - heldAt) % CAT_EMOTION_MS)
+                    * CAT_HAPPY_FRAMES / CAT_EMOTION_MS);
+        } else if (catState == CAT_LOOK && catGift != null) {
             final long lookElapsed = Math.max(0L, now - catLookStart);
             if (lookElapsed < 700L) {
                 sheet = catSurprisedSheet;
@@ -634,7 +802,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     private void drawCatHearts(Canvas canvas, long now, float visibility) {
-        if (catGift == null || catGift == draggingGift || catAttention < 0.01f) {
+        if (catGift == null || catGift == draggingGift || catGift == heldGift || catAttention < 0.01f) {
             return;
         }
         final float gx = catGift.drawX;
@@ -665,6 +833,327 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         canvas.rotate(-10f);
         canvas.drawPath(catHeartPath, catHeartPaint);
         canvas.restore();
+    }
+
+    /** Fades the collectible card in/out with the showcase state. */
+    private void updateCardAlpha(float dt) {
+        final float target = catState == CAT_SHOWCASE && heldGift != null ? 1f : 0f;
+        cardAlpha += (target - cardAlpha) * (1f - (float) Math.exp(-dt / 150f));
+        if (cardAlpha < 0.002f) {
+            cardAlpha = 0f;
+        }
+    }
+
+    /** The gift Paimon is currently carrying, drawn as a child of the companion. */
+    private void drawHeldGift(Canvas canvas, long now, float visibility) {
+        if (heldGift == null) {
+            return;
+        }
+        final float x = catX;
+        final float y = catY + dp(24);
+        float scale = catState == CAT_SHOWCASE ? 1.5f : 1.2f;
+        if (catState == CAT_SHOWCASE) {
+            scale *= 1f + 0.03f * (float) Math.sin(now / 260.0);
+        }
+        final float swing = (float) Math.sin(now / 200.0) * (catState == CAT_CARRY ? 7f : 3f);
+        final float alpha = catAlpha * visibility;
+        heldGift.draw(canvas, x, y, scale, swing, alpha, 1.35f, 0f, 0f);
+    }
+
+    private void drawGiftOfDayCard(Canvas canvas, float acx, float acy, float avatarRadius, float visibility) {
+        if (heldGift == null || cardAlpha <= 0.002f || visibility <= 0.001f) {
+            return;
+        }
+        final float maxW = Math.max(dp(180), getWidth() - dp(40));
+        final float w = Math.min(dp(316), maxW);
+        final float h = dp(96);
+        float left = acx - w / 2f;
+        float top = acy + avatarRadius + dp(38);
+        final float limit = dragBottom() - dp(16) - h;
+        if (top > limit) {
+            top = limit;
+        }
+        if (top < dragTop() + dp(4)) {
+            top = dragTop() + dp(4);
+        }
+        left = clamp(left, dp(12), Math.max(dp(12), getWidth() - dp(12) - w));
+        cardRect.set(left, top, left + w, top + h);
+
+        final float alpha = cardAlpha * visibility;
+        canvas.save();
+        canvas.translate(0f, (1f - cardAlpha) * dp(12));
+
+        cardPaint.setStyle(Paint.Style.FILL);
+        cardPaint.setShader(null);
+        cardPath.reset();
+        cardPath.addRoundRect(cardRect.left + dp(1), cardRect.top + dp(3),
+                cardRect.right + dp(1), cardRect.bottom + dp(3), dp(15), dp(15), Path.Direction.CW);
+        cardPaint.setColor(0x42000000);
+        canvas.drawPath(cardPath, cardPaint);
+
+        cardPath.reset();
+        cardPath.addRoundRect(cardRect, dp(14), dp(14), Path.Direction.CW);
+        cardPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite), 0.96f * alpha));
+        canvas.drawPath(cardPath, cardPaint);
+
+        cardAccentPaint.setStyle(Paint.Style.STROKE);
+        cardAccentPaint.setStrokeWidth(dp(1.2f));
+        cardAccentPaint.setColor(Theme.multAlpha(heldGift.color, 0.6f * alpha));
+        canvas.drawPath(cardPath, cardAccentPaint);
+
+        // Accent strip on the left edge.
+        canvas.save();
+        canvas.clipPath(cardPath);
+        cardAccentPaint.setStyle(Paint.Style.FILL);
+        cardAccentPaint.setColor(Theme.multAlpha(heldGift.color, 0.85f * alpha));
+        canvas.drawRect(cardRect.left, cardRect.top, cardRect.left + dp(4), cardRect.bottom, cardAccentPaint);
+        canvas.restore();
+
+        final float x = cardRect.left + dp(15);
+        final float right = cardRect.right - dp(12);
+
+        cardSubPaint.setStyle(Paint.Style.FILL);
+        cardSubPaint.setFakeBoldText(true);
+        cardSubPaint.setTextSize(dp(9.5f));
+        cardSubPaint.setLetterSpacing(0.16f);
+        cardSubPaint.setColor(Theme.multAlpha(heldGift.color, 0.95f * alpha));
+        canvas.drawText("ПОДАРОК ДНЯ", x, cardRect.top + dp(19), cardSubPaint);
+
+        cardTextPaint.setStyle(Paint.Style.FILL);
+        cardTextPaint.setFakeBoldText(true);
+        cardTextPaint.setTextSize(dp(16));
+        cardTextPaint.setColor(Theme.multAlpha(
+                Theme.getColor(Theme.key_windowBackgroundWhiteBlackText), alpha));
+        final String title = heldGift.title != null && heldGift.title.length() > 0
+                ? heldGift.title : "Коллекционный подарок";
+        canvas.drawText(ellipsize(cardTextPaint, title, right - x),
+                x, cardRect.top + dp(43), cardTextPaint);
+
+        cardSubPaint.setLetterSpacing(0f);
+        cardSubPaint.setFakeBoldText(false);
+        cardSubPaint.setTextSize(dp(12));
+        cardSubPaint.setColor(Theme.multAlpha(
+                Theme.getColor(Theme.key_windowBackgroundWhiteGrayText), alpha));
+        final StringBuilder meta = new StringBuilder();
+        if (heldGift.num > 0) {
+            meta.append('№').append(heldGift.num);
+        }
+        if (heldGift.date > 0L) {
+            if (meta.length() > 0) {
+                meta.append(" · ");
+            }
+            meta.append(DateFormat.format("d MMM yyyy", heldGift.date * 1000L));
+        }
+        if (meta.length() == 0) {
+            meta.append("из коллекции");
+        }
+        canvas.drawText(ellipsize(cardSubPaint, meta.toString(), right - x),
+                x, cardRect.top + dp(63), cardSubPaint);
+
+        final String sender = heldSender != null && heldSender.length() > 0
+                ? "от " + heldSender : "Подарок дня";
+        canvas.drawText(ellipsize(cardSubPaint, sender, right - x - dp(58)),
+                x, cardRect.top + dp(81), cardSubPaint);
+
+        cardSubPaint.setTextSize(dp(10));
+        cardSubPaint.setColor(Theme.multAlpha(
+                Theme.getColor(Theme.key_windowBackgroundWhiteGrayText), 0.7f * alpha));
+        final String hint = "тап — убрать";
+        canvas.drawText(hint, right - cardSubPaint.measureText(hint),
+                cardRect.top + dp(81), cardSubPaint);
+
+        canvas.restore();
+    }
+
+    /** Truncates text with an ellipsis, because Paint has no setEllipsize. */
+    private String ellipsize(Paint paint, String text, float maxWidth) {
+        if (text == null) {
+            return "";
+        }
+        if (maxWidth <= 0f || paint.measureText(text) <= maxWidth) {
+            return text;
+        }
+        final int len = paint.breakText(text, true, maxWidth - dp(10), null);
+        return len > 0 ? text.substring(0, len) + "…" : "";
+    }
+
+    private void drawConstellationDim(Canvas canvas) {
+        if (!consEdit) {
+            return;
+        }
+        consUiPaint.setStyle(Paint.Style.FILL);
+        consUiPaint.setShader(null);
+        consUiPaint.setColor(0x3D000000);
+        canvas.drawRect(0, 0, getWidth(), dragBottom(), consUiPaint);
+    }
+
+    /** Glowing links between the bubbles, drawn underneath them. */
+    private void drawConstellations(Canvas canvas, long now, float visibility) {
+        if (!DeltamentProfileMusic.isConstellationsEnabled() || visibility <= 0.001f) {
+            return;
+        }
+        if (!constellations.isEmpty()) {
+            final float twinkle = 0.78f + 0.22f * (float) Math.sin(now / 430.0);
+            for (int i = 0; i < constellations.size(); i++) {
+                final long[] link = constellations.get(i);
+                final Gift a = findGiftById(link[0]);
+                final Gift b = findGiftById(link[1]);
+                if (a == null || b == null) {
+                    continue;
+                }
+                drawLink(canvas,
+                        giftCenterX(a), giftCenterY(a),
+                        giftCenterX(b), giftCenterY(b),
+                        a.color, b.color, visibility * twinkle);
+            }
+        }
+        if (consEdit && consFrom != null) {
+            drawLink(canvas,
+                    giftCenterX(consFrom), giftCenterY(consFrom),
+                    consTouchX, consTouchY,
+                    consFrom.color, consFrom.color, visibility * 0.85f);
+        }
+    }
+
+    private void drawLink(Canvas canvas, float x1, float y1, float x2, float y2,
+                          int colorA, int colorB, float alpha) {
+        final float dist = (float) Math.hypot(x2 - x1, y2 - y1);
+        if (dist < dp(3) || alpha <= 0.01f) {
+            return;
+        }
+        final float sag = Math.min(dp(46), dist * 0.22f);
+        final float mx = (x1 + x2) / 2f;
+        final float my = (y1 + y2) / 2f + sag;
+        linkPath.reset();
+        linkPath.moveTo(x1, y1);
+        linkPath.quadTo(mx, my, x2, y2);
+
+        linkGlowPaint.setStyle(Paint.Style.STROKE);
+        linkGlowPaint.setStrokeCap(Paint.Cap.ROUND);
+        linkGlowPaint.setStrokeWidth(dp(4.4f));
+        linkGlowPaint.setShader(null);
+        linkGlowPaint.setColor(Theme.multAlpha(colorA, 0.30f * alpha));
+        canvas.drawPath(linkPath, linkGlowPaint);
+
+        linkPaint.setStyle(Paint.Style.STROKE);
+        linkPaint.setStrokeCap(Paint.Cap.ROUND);
+        linkPaint.setStrokeWidth(dp(1.5f));
+        linkPaint.setShader(new LinearGradient(x1, y1, x2, y2,
+                new int[]{Theme.multAlpha(colorA, 0.92f * alpha),
+                        Theme.multAlpha(colorB, 0.92f * alpha)},
+                null, Shader.TileMode.CLAMP));
+        canvas.drawPath(linkPath, linkPaint);
+        linkPaint.setShader(null);
+
+        consUiPaint.setStyle(Paint.Style.FILL);
+        consUiPaint.setShader(null);
+        consUiPaint.setColor(Theme.multAlpha(colorA, 0.85f * alpha));
+        canvas.drawCircle(x1, y1, dp(2.1f), consUiPaint);
+        consUiPaint.setColor(Theme.multAlpha(colorB, 0.85f * alpha));
+        canvas.drawCircle(x2, y2, dp(2.1f), consUiPaint);
+    }
+
+    private void updateConsStarPath(float r) {
+        consStarPath.reset();
+        for (int i = 0; i < 10; i++) {
+            final float rr = (i & 1) == 0 ? r : r * 0.45f;
+            final double a = -Math.PI / 2.0 + i * Math.PI / 5.0;
+            final float px = (float) Math.cos(a) * rr;
+            final float py = (float) Math.sin(a) * rr;
+            if (i == 0) {
+                consStarPath.moveTo(px, py);
+            } else {
+                consStarPath.lineTo(px, py);
+            }
+        }
+        consStarPath.close();
+    }
+
+    /** The star button that enters the constellation editor, plus its hints. */
+    private void drawConstellationButton(Canvas canvas, long now, float visibility) {
+        consButtonVisible = false;
+        if (!DeltamentProfileMusic.isConstellationsEnabled() || !canDrag
+                || gifts.size() < 2 || heldGift != null || flingSpinStart >= 0L
+                || visibility <= 0.001f) {
+            if (heldGift != null || flingSpinStart >= 0L) {
+                consEdit = false;
+                consFrom = null;
+            }
+            return;
+        }
+        consButtonVisible = true;
+        final float bx = getWidth() - dp(27);
+        final float by = dragBottom() - dp(40);
+        consButtonX = bx;
+        consButtonY = by;
+        consButtonR = dp(19);
+        final int accent = Theme.getColor(Theme.key_featuredStickers_addButton);
+        final int bg = Theme.getColor(Theme.key_windowBackgroundWhite);
+        final float alpha = visibility;
+
+        consUiPaint.setShader(null);
+        consUiPaint.setStyle(Paint.Style.FILL);
+        consUiPaint.setColor(Theme.multAlpha(bg, 0.86f * alpha));
+        canvas.drawCircle(bx, by, consButtonR, consUiPaint);
+
+        consUiPaint.setStyle(Paint.Style.STROKE);
+        consUiPaint.setStrokeWidth(dp(1.2f));
+        consUiPaint.setColor(Theme.multAlpha(accent, (consEdit ? 1f : 0.62f) * alpha));
+        canvas.drawCircle(bx, by, consButtonR, consUiPaint);
+
+        if (!consEdit) {
+            final float pulse = 0.5f + 0.5f * (float) Math.sin(now / 480.0);
+            consUiPaint.setStyle(Paint.Style.STROKE);
+            consUiPaint.setStrokeWidth(dp(1f));
+            consUiPaint.setColor(Theme.multAlpha(accent, 0.20f * alpha * (0.4f + pulse)));
+            canvas.drawCircle(bx, by, consButtonR + dp(4) + dp(3) * pulse, consUiPaint);
+        }
+
+        updateConsStarPath(dp(9f));
+        canvas.save();
+        canvas.translate(bx, by);
+        consUiPaint.setStyle(Paint.Style.FILL);
+        consUiPaint.setColor(Theme.multAlpha(consEdit ? 0xFFFFFFFF : accent, alpha));
+        canvas.drawPath(consStarPath, consUiPaint);
+        canvas.restore();
+
+        if (!consEdit && constellations.isEmpty()) {
+            if (consHintStart == 0L) {
+                consHintStart = now;
+            }
+            final long age = now - consHintStart;
+            if (age < 6800L && !consHintShown) {
+                final float hintAlpha = alpha * Math.min(1f, Math.max(0f, (6800f - age) / 900f));
+                consTextPaint.setStyle(Paint.Style.FILL);
+                consTextPaint.setFakeBoldText(false);
+                consTextPaint.setTextSize(dp(11));
+                consTextPaint.setColor(Theme.multAlpha(
+                        Theme.getColor(Theme.key_windowBackgroundWhiteBlackText), 0.85f * hintAlpha));
+                final String text = "Созвездия";
+                final float tw = consTextPaint.measureText(text);
+                final float tx = bx - consButtonR - dp(8) - tw;
+                final float ty = by + dp(4);
+                consUiPaint.setStyle(Paint.Style.FILL);
+                consUiPaint.setColor(Theme.multAlpha(bg, 0.76f * hintAlpha));
+                canvas.drawRoundRect(tx - dp(6), ty - dp(11), tx + tw + dp(6), ty + dp(4),
+                        dp(8), dp(8), consUiPaint);
+                canvas.drawText(text, tx, ty, consTextPaint);
+                if (age > 6400L) {
+                    consHintShown = true;
+                }
+            }
+        }
+
+        if (consEdit) {
+            consTextPaint.setStyle(Paint.Style.FILL);
+            consTextPaint.setFakeBoldText(false);
+            consTextPaint.setTextSize(dp(11));
+            consTextPaint.setColor(Theme.multAlpha(0xFFFFFFFF, 0.9f * alpha));
+            final String hint = "Проведи между пузырями · тап по линии — убрать";
+            final float tw = consTextPaint.measureText(hint);
+            canvas.drawText(hint, Math.max(dp(8), (getWidth() - tw) / 2f),
+                    dragBottom() - dp(70), consTextPaint);
+        }
     }
 
     private SharedPreferences prefs() {
@@ -714,6 +1203,234 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 .apply();
     }
 
+    // ---- "Живые созвездия": user-drawn links between gift bubbles ----------
+
+    private String linksKey() {
+        return currentAccount + "_" + dialogId + "_constellations";
+    }
+
+    private String dailyKey() {
+        return currentAccount + "_" + dialogId + "_daily_gift";
+    }
+
+    private void ensureConstellationsLoaded() {
+        if (constellationsLoaded) {
+            return;
+        }
+        constellationsLoaded = true;
+        final SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            return;
+        }
+        final String value = prefs.getString(linksKey(), null);
+        if (value == null || value.length() == 0) {
+            return;
+        }
+        for (String part : value.split(";")) {
+            final int colon = part.indexOf(':');
+            if (colon <= 0 || colon >= part.length() - 1) {
+                continue;
+            }
+            try {
+                final long a = Long.parseLong(part.substring(0, colon));
+                final long b = Long.parseLong(part.substring(colon + 1));
+                if (a != 0L && b != 0L && a != b) {
+                    constellations.add(new long[]{a, b});
+                }
+            } catch (NumberFormatException ignore) {
+            }
+        }
+    }
+
+    private void saveConstellations() {
+        final SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            return;
+        }
+        final StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < constellations.size(); i++) {
+            if (builder.length() > 0) {
+                builder.append(';');
+            }
+            builder.append(constellations.get(i)[0]).append(':').append(constellations.get(i)[1]);
+        }
+        prefs.edit().putString(linksKey(), builder.toString()).apply();
+    }
+
+    private Gift findGiftById(long id) {
+        for (int i = 0; i < gifts.size(); i++) {
+            if (gifts.get(i).id == id) {
+                return gifts.get(i);
+            }
+        }
+        return null;
+    }
+
+    private void toggleLink(long a, long b) {
+        if (a == b || a == 0L || b == 0L) {
+            return;
+        }
+        for (int i = 0; i < constellations.size(); i++) {
+            final long[] link = constellations.get(i);
+            if ((link[0] == a && link[1] == b) || (link[0] == b && link[1] == a)) {
+                constellations.remove(i);
+                saveConstellations();
+                return;
+            }
+        }
+        if (constellations.size() >= 24) {
+            return;
+        }
+        constellations.add(new long[]{a, b});
+        saveConstellations();
+    }
+
+    /** Index of the constellation line under the touch, or -1. */
+    private int linkUnder(float x, float y) {
+        final float threshold = dp(13);
+        for (int i = 0; i < constellations.size(); i++) {
+            final long[] link = constellations.get(i);
+            final Gift a = findGiftById(link[0]);
+            final Gift b = findGiftById(link[1]);
+            if (a == null || b == null) {
+                continue;
+            }
+            final float x1 = giftCenterX(a), y1 = giftCenterY(a);
+            final float x2 = giftCenterX(b), y2 = giftCenterY(b);
+            final float dist = (float) Math.hypot(x2 - x1, y2 - y1);
+            final float sag = Math.min(dp(46), dist * 0.22f);
+            final float mx = (x1 + x2) / 2f;
+            final float my = (y1 + y2) / 2f + sag;
+            for (int step = 1; step < 8; step++) {
+                final float t = step / 8f;
+                final float inv = 1f - t;
+                final float px = inv * inv * x1 + 2f * inv * t * mx + t * t * x2;
+                final float py = inv * inv * y1 + 2f * inv * t * my + t * t * y2;
+                if (Math.hypot(px - x, py - y) <= threshold) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // ---- "Мяууу-почтальон" / "Подарок дня" --------------------------------
+
+    private boolean shouldShowDailyGift() {
+        final SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            return true;
+        }
+        final long last = prefs.getLong(dailyKey(), 0L);
+        return last <= 0L || Math.abs(System.currentTimeMillis() - last) >= 12L * 60L * 60L * 1000L;
+    }
+
+    private void markDailyShown() {
+        final SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            return;
+        }
+        prefs.edit().putLong(dailyKey(), System.currentTimeMillis()).apply();
+    }
+
+    /** Deterministic rotation over the pinned gifts, so every day is different. */
+    private Gift pickDailyGift() {
+        final ArrayList<Gift> pinned = new ArrayList<>();
+        final ArrayList<Gift> pool = new ArrayList<>();
+        for (int i = 0; i < gifts.size(); i++) {
+            final Gift gift = gifts.get(i);
+            if (gift == draggingGift || gift == heldGift) {
+                continue;
+            }
+            pool.add(gift);
+            if (gift.pinned) {
+                pinned.add(gift);
+            }
+        }
+        final ArrayList<Gift> source = pinned.isEmpty() ? pool : pinned;
+        if (source.isEmpty()) {
+            return null;
+        }
+        final long day = System.currentTimeMillis() / 86400000L;
+        return source.get((int) (day % source.size()));
+    }
+
+    private String resolveSender(Gift gift) {
+        if (gift.fromId != 0L) {
+            final TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(gift.fromId);
+            if (user != null) {
+                final String name = UserObject.getUserName(user);
+                if (name != null && name.length() > 0) {
+                    return name;
+                }
+            }
+        }
+        if (gift.ownerName != null && gift.ownerName.length() > 0) {
+            return gift.ownerName;
+        }
+        return null;
+    }
+
+    private void startGiftOfDay(long now, boolean manual) {
+        if (heldGift != null || gifts.isEmpty() || !DeltamentProfileMusic.isCatEnabled()
+                || !DeltamentProfileMusic.isGiftOfDayEnabled()) {
+            return;
+        }
+        if (catState == CAT_CARRY || catState == CAT_SHOWCASE || catState == CAT_RETURN) {
+            return;
+        }
+        if (manual && now - dailyAttemptAt < 1200L) {
+            return;
+        }
+        final Gift gift = pickDailyGift();
+        if (gift == null) {
+            return;
+        }
+        dailyAttemptAt = now;
+        catGift = gift;
+        pendingCarry = true;
+        catState = CAT_TO_GIFT;
+        catNextLookAt = now + 90000L;
+        if (!manual) {
+            markDailyShown();
+        }
+        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        invalidate();
+    }
+
+    private void triggerGiftOfDay() {
+        startGiftOfDay(SystemClock.uptimeMillis(), true);
+    }
+
+    private void dismissGiftOfDay() {
+        if (heldGift == null) {
+            return;
+        }
+        catState = CAT_RETURN;
+        showcaseUntil = 0L;
+        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        invalidate();
+    }
+
+    /**
+     * Aborts the ritual without any animation: the gift returns to being a
+     * normal bubble and Paimon keeps flying from where she currently is, so a
+     * cancelled ritual never teleports her across the screen.
+     */
+    private void cancelGiftOfDay() {
+        heldGift = null;
+        heldSender = null;
+        pendingCarry = false;
+        showcaseUntil = 0L;
+        cardAlpha = 0f;
+        catGift = null;
+        if (catState != CAT_WANDER) {
+            catState = CAT_WANDER;
+            catRetargetAt = 0L;
+            catNextLookAt = SystemClock.uptimeMillis() + 12000L;
+        }
+    }
+
     public final class Gift {
 
         public final long id;
@@ -730,9 +1447,36 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         /** Pinned-to-top gifts are the ones the "Мяууу" companion prefers. */
         public boolean pinned;
 
+        /** Collectible card data: title, serial number, date and sender. */
+        public String title = "";
+        public int num;
+        public long date;
+        public long fromId;
+        public String ownerName;
+
+        public void applySavedGift(TL_stars.SavedStarGift saved) {
+            if (saved == null) {
+                return;
+            }
+            date = saved.date;
+            fromId = peerUserId(saved.from_id);
+            if (ownerName == null && saved.name_hidden) {
+                ownerName = "";
+            }
+        }
+
+        private long peerUserId(TLRPC.Peer peer) {
+            if (peer instanceof TLRPC.TL_peerUser) {
+                return ((TLRPC.TL_peerUser) peer).user_id;
+            }
+            return 0L;
+        }
+
         public Gift(TL_stars.TL_starGiftUnique gift) {
             id = gift.id;
             giftId = gift.gift_id;
+            title = gift.title == null ? "" : gift.title;
+            num = gift.num;
             TLRPC.Document doc = gift.getDocument();
             if (doc != null && doc.id == 0) {
                 doc = null;
@@ -784,6 +1528,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         /** Glide back to the layout after the user releases the bubble. */
         public long settleStart;
         public float settleFromX, settleFromY, settleFromScale = 1f;
+        /**
+         * After a drop the bubble ignores the collision displacement for a
+         * moment, so it visibly stays exactly where it was released instead of
+         * being pushed around by its neighbours.
+         */
+        public long holdUntil;
 
         /** Physical displacement from the layout slot, in pixels. */
         public float physX, physY;
@@ -805,6 +1555,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             particles = b.particles;
             position = b.position;
             pinned = b.pinned;
+            title = b.title;
+            num = b.num;
+            date = b.date;
+            fromId = b.fromId;
+            ownerName = b.ownerName;
             offsetX = b.offsetX;
             offsetY = b.offsetY;
             orbitDistance = b.orbitDistance;
@@ -1144,6 +1899,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 if (!savedGift.unsaved && savedGift.pinned_to_top && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
                     final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
                     gift.pinned = true;
+                    gift.applySavedGift(savedGift);
                     if (!giftIds.contains(gift.id)) {
                         gifts.add(gift);
                         giftIds.add(gift.id);
@@ -1158,6 +1914,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 final TL_stars.SavedStarGift savedGift = list.gifts.get(i);
                 if (!savedGift.unsaved && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
                     final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
+                    gift.applySavedGift(savedGift);
                     if (!giftIds.contains(gift.id)) {
                         gifts.add(gift);
                         giftIds.add(gift.id);
@@ -1267,10 +2024,13 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         lastFrameTime = now;
 
         updateMusicPulse(dt);
+        updateCardAlpha(dt);
+        ensureConstellationsLoaded();
         final boolean musicVisible = visibility > 0.001f
                 && (musicKick > 0.01f || musicLevel > 0.01f);
         final boolean catOn = DeltamentProfileMusic.isCatEnabled();
-        if (!catOn && (catFlySheet != null || catGift != null || catAlpha > 0f)) {
+        if (!catOn && (catFlySheet != null || catGift != null || catAlpha > 0f || heldGift != null)) {
+            cancelGiftOfDay();
             catGift = null;
             catState = CAT_WANDER;
             catAttention = 0f;
@@ -1414,7 +2174,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 gy += gift.offsetY * avatarSize * offsetFade;
                 // Keep custom positions on-screen after rotation / resize.
                 gx = clamp(gx, dragPad(), Math.max(dragPad(), getWidth() - dragPad()));
-                gy = clamp(gy, dragPad(), Math.max(dragPad(), dragBottom() - dragPad()));
+                gy = clamp(gy, dragTop(), Math.max(dragTop(), dragBottom() - dp(27)));
             }
 
             // Fly out of the avatar on first appearance, like the iOS cover.
@@ -1439,12 +2199,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
             if (!spinning && gift.settleStart == 0L && enter >= 0.999f) {
                 // Resting bubbles must stay reachable: never hidden under the
-                // action bar and never pushed off the screen after a spin.
-                final float halfSize = dp(27) * scale;
+                // action bar and never pushed off the screen after a spin. The
+                // bounds match dragTop()/dragBottom(), so the position a bubble
+                // is dropped at is exactly the position it rests at.
                 gx = clamp(gx, dp(10), Math.max(dp(10), getWidth() - dp(10)));
-                gy = clamp(gy, barBottom + dp(3) + halfSize,
-                        Math.max(barBottom + dp(3) + halfSize,
-                                dragBottom() - dp(6) - halfSize));
+                gy = clamp(gy, dragTop(), Math.max(dragTop(), dragBottom() - dp(27)));
             }
 
             gift.drawX = gx;
@@ -1473,7 +2232,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         for (int i = 0; i < gifts.size(); i++) {
             final Gift g = gifts.get(i);
-            if (g == draggingGift) continue;
+            if (g == draggingGift || g == heldGift) continue;
             g.drawX += g.physX;
             g.drawY += g.physY;
             g.lastCx = g.drawX;
@@ -1491,6 +2250,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             drawMusicVisualizer(canvas, acx, acy, avatarRadius, visibility);
         }
 
+        drawConstellationDim(canvas);
+        drawConstellations(canvas, now, visibility);
+
         // Pass 3: draw back-to-front so overlapping spheres stack correctly.
         // Bubbles on the far side of the orbit are clipped out of the avatar.
         final int count = drawOrderForFrame();
@@ -1500,8 +2262,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         if (catOn) {
             drawCatHearts(canvas, now, visibility);
+        }
+        drawHeldGift(canvas, now, visibility);
+        if (catOn) {
             drawCat(canvas, now, visibility);
         }
+        drawGiftOfDayCard(canvas, acx, acy, avatarRadius, visibility);
 
         if (draggingGift != null) {
             draggingGift.lastCx = dragRenderX;
@@ -1509,6 +2275,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             draggingGift.draw(canvas, dragRenderX, dragRenderY, dragLift * musicScale, 0f, 1f, 1.2f,
                     dragStretch, dragStretchAngle);
         }
+
+        drawConstellationButton(canvas, now, visibility);
 
         canvas.restore();
 
@@ -1522,7 +2290,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         int count = 0;
         for (int i = 0; i < gifts.size(); i++) {
             final Gift gift = gifts.get(i);
-            if (gift == draggingGift) continue;
+            if (gift == draggingGift || gift == heldGift) continue;
             if (count == drawOrder.length) {
                 final Gift[] bigger = new Gift[Math.max(4, drawOrder.length * 2)];
                 System.arraycopy(drawOrder, 0, bigger, 0, drawOrder.length);
@@ -1605,7 +2373,12 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         for (int i = 0; i < n; i++) {
             final Gift gift = gifts.get(i);
-            if (gift == draggingGift) {
+            if (gift == draggingGift || gift == heldGift) {
+                gift.physX = gift.physY = gift.velX = gift.velY = 0f;
+                continue;
+            }
+            if (SystemClock.uptimeMillis() < gift.holdUntil) {
+                // Just dropped: hold the exact release point.
                 gift.physX = gift.physY = gift.velX = gift.velY = 0f;
                 continue;
             }
@@ -1788,32 +2561,50 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     /**
-     * Slope of the spin over time. Mostly linear, so the orbit keeps visibly
-     * rotating through the whole duration; the small cosine blend only softens
-     * the start and the stop (an ease-out made the spin look 1 s long).
+     * Slope of the spin over time, built from a speed profile: a short ramp-in,
+     * a long cruise, then a long ramp-out (the last 22 % of the duration). The
+     * integral is normalised so ease(1) == 1 and the derivative at the end is
+     * zero — the orbit decelerates into the layout instead of stopping dead.
      */
     private static float spinEase(float progress) {
         final float p = progress < 0f ? 0f : (progress > 1f ? 1f : progress);
-        final float smooth = 0.5f - 0.5f * (float) Math.cos(Math.PI * p);
-        return p * 0.55f + smooth * 0.45f;
+        final float in = 0.06f;
+        final float out = 0.22f;
+        final float total = 1f - in / 2f - out / 2f;
+        final float sum;
+        if (p < in) {
+            sum = p * p / (2f * in);
+        } else if (p <= 1f - out) {
+            sum = in / 2f + (p - in);
+        } else {
+            final float t = 1f - p;
+            sum = in / 2f + (1f - out - in) + out / 2f - t * t / (2f * out);
+        }
+        return sum / total;
     }
 
     /**
      * How strongly the bubbles are pulled into the orbit ring. It snaps in
      * almost immediately (so the very first moment already passes behind the
-     * avatar), holds for the whole spin, then releases quickly at the end so
-     * every bubble glides back to its own slot.
+     * avatar), holds for most of the spin, then dissolves over the last 20 %
+     * with a smootherstep: the return to the own slots takes ~1.1 s and has no
+     * visible snap at either end.
      */
     private static float spinGather(float progress) {
         if (progress <= 0f || progress >= 1f) {
             return 0f;
         }
-        final float rise = 0.045f;
-        final float fall = 0.10f;
-        final float linear = progress < rise ? progress / rise
-                : (progress > 1f - fall ? (1f - progress) / fall : 1f);
-        final float g = linear < 0f ? 0f : (linear > 1f ? 1f : linear);
-        return g * g * (3f - 2f * g);
+        final float rise = 0.04f;
+        final float fall = 0.20f;
+        if (progress < rise) {
+            final float g = progress / rise;
+            return g * g * (3f - 2f * g);
+        }
+        if (progress > 1f - fall) {
+            final float g = (1f - progress) / fall;
+            return g * g * g * (g * (g * 6f - 15f) + 10f);
+        }
+        return 1f;
     }
 
     /**
@@ -1888,7 +2679,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         // mostly below the avatar and along both side margins.
         while (placed < count && attempts < count * 900) {
             attempts++;
-            final float usableTop = barBottom + dp(6);
+            final float usableTop = dragTop();
             final float usableBottom = navTop - dp(4);
             final float px, py;
             if (bubbleRandom.nextFloat() < 0.68f) {
@@ -1973,8 +2764,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     public Gift getGiftUnder(float x, float y) {
         for (int i = gifts.size() - 1; i >= 0; --i) {
-            if (gifts.get(i).bounds.contains(x, y))
-                return gifts.get(i);
+            final Gift gift = gifts.get(i);
+            if (gift == heldGift) continue;
+            if (gift.bounds.contains(x, y))
+                return gift;
         }
         return null;
     }
@@ -1987,10 +2780,71 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final int action = event.getActionMasked();
 
         if (action == MotionEvent.ACTION_DOWN) {
-            final Gift hit = getGiftUnder(event.getX(), event.getY());
+            final float x = event.getX();
+            final float y = event.getY();
+
+            // Collectible card: any tap on it sends the gift back home.
+            if (cardAlpha > 0.35f && cardRect.contains(x, y)) {
+                dismissGiftOfDay();
+                return true;
+            }
+
+            // Constellation editor toggle.
+            if (consButtonVisible) {
+                final float bdx = x - consButtonX;
+                final float bdy = y - consButtonY;
+                if (bdx * bdx + bdy * bdy <= consButtonR * consButtonR * 2.2f) {
+                    consEdit = !consEdit;
+                    consFrom = null;
+                    consTapEmpty = false;
+                    if (consEdit) {
+                        consHintStart = 0L;
+                    }
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    invalidate();
+                    return true;
+                }
+            }
+
+            if (consEdit) {
+                final Gift hit = getGiftUnder(x, y);
+                if (hit != null) {
+                    consFrom = hit;
+                    consTouchX = x;
+                    consTouchY = y;
+                    return true;
+                }
+                final int line = linkUnder(x, y);
+                if (line >= 0) {
+                    constellations.remove(line);
+                    saveConstellations();
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    invalidate();
+                    return true;
+                }
+                consTapEmpty = true;
+                downX = x;
+                downY = y;
+                return true;
+            }
+
+            // Tap on the companion offers the "gift of the day" again.
+            if (canDrag && catAlpha > 0.3f && heldGift == null
+                    && (catState == CAT_WANDER || catState == CAT_LOOK)) {
+                final float cdx = x - catX;
+                final float cdy = y - catY;
+                if (cdx * cdx + cdy * cdy <= dp(36) * dp(36)) {
+                    catTapPending = true;
+                    downX = x;
+                    downY = y;
+                    return true;
+                }
+            }
+
+            final Gift hit = getGiftUnder(x, y);
             pressedGift = hit;
-            downX = event.getX();
-            downY = event.getY();
+            downX = x;
+            downY = y;
             lastMoveX = downX;
             lastMoveY = downY;
             lastMoveTime = event.getEventTime();
@@ -2017,6 +2871,48 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             velocityTracker.addMovement(event);
         }
 
+        if (consEdit) {
+            if (action == MotionEvent.ACTION_MOVE) {
+                if (consFrom != null) {
+                    consTouchX = event.getX();
+                    consTouchY = event.getY();
+                    invalidate();
+                }
+                return true;
+            }
+            if (action == MotionEvent.ACTION_UP) {
+                if (consFrom != null) {
+                    final Gift target = getGiftUnder(event.getX(), event.getY());
+                    if (target != null && target != consFrom) {
+                        toggleLink(consFrom.id, target.id);
+                        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    }
+                    consFrom = null;
+                    invalidate();
+                } else if (consTapEmpty) {
+                    consTapEmpty = false;
+                    consEdit = false;
+                    invalidate();
+                }
+                return true;
+            }
+            if (action == MotionEvent.ACTION_CANCEL) {
+                consFrom = null;
+                consTapEmpty = false;
+                return true;
+            }
+        }
+
+        if (catTapPending) {
+            if (action == MotionEvent.ACTION_UP) {
+                catTapPending = false;
+                triggerGiftOfDay();
+            } else if (action == MotionEvent.ACTION_CANCEL) {
+                catTapPending = false;
+            }
+            return true;
+        }
+
         if (draggingGift != null) {
             if (action == MotionEvent.ACTION_MOVE) {
                 final long eventTime = event.getEventTime();
@@ -2027,7 +2923,8 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 lastMoveY = event.getY();
                 lastMoveTime = eventTime;
                 dragCx = clamp(event.getX() + dragTouchOffsetX, dragPad(), Math.max(dragPad(), getWidth() - dragPad()));
-                dragCy = clamp(event.getY() + dragTouchOffsetY, dragPad(), Math.max(dragPad(), dragBottom() - dragPad()));
+                dragCy = clamp(event.getY() + dragTouchOffsetY, dragTop(),
+                        Math.max(dragTop(), dragBottom() - dp(27)));
                 // Some parents intercept the first MOVE even after the initial
                 // request, so keep asking while the bubble is being dragged.
                 final ViewParent parent = getParent();
@@ -2036,13 +2933,20 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
                 }
                 invalidate();
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                if (velocityTracker != null) {
+                if (action == MotionEvent.ACTION_UP && velocityTracker != null) {
                     velocityTracker.computeCurrentVelocity(1000);
                     lastVelocityX = velocityTracker.getXVelocity();
                     lastVelocityY = velocityTracker.getYVelocity();
+                } else {
+                    // A cancelled gesture must not inherit a stale velocity and
+                    // accidentally start a spin.
+                    lastVelocityX = lastVelocityY = 0f;
                 }
                 releaseVelocityTracker();
-                finishDrag(action == MotionEvent.ACTION_UP);
+                // Even a cancelled gesture (a system swipe, an incoming dialog)
+                // keeps the last position, so the bubble never jumps back to a
+                // stale slot after the finger disappears.
+                finishDrag(true);
             }
             return true;
         }
@@ -2084,6 +2988,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
         final Gift gift = pressedGift;
         pressedGift = null;
+        cancelGiftOfDay();
         draggingGift = gift;
         gift.bounce.setPressed(false);
         gift.settleStart = 0L;
@@ -2100,6 +3005,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         lastMoveX = downX;
         lastMoveY = downY;
         lastMoveTime = SystemClock.uptimeMillis();
+        dragStartTime = lastMoveTime;
         dragTouchOffsetX = dragCx - downX;
         dragTouchOffsetY = dragCy - downY;
         if (velocityTracker != null) {
@@ -2123,30 +3029,37 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         if (gift != null && apply) {
             final long now = SystemClock.uptimeMillis();
             final float speed = (float) Math.hypot(lastVelocityX, lastVelocityY);
-            if (speed > dp(600)) {
-                // Fast release: do NOT persist the release point. A fling almost
-                // always ends near a screen edge/corner, and saving that offset
-                // used to strand the bubble there for good. The slot from before
-                // the gesture is kept, so after orbiting the bubbles go exactly
-                // back to where they were.
+            // Always persist where the user let go. Previously a "fast" release
+            // skipped this, so an ordinary drag was treated as a fling, the whole
+            // collection orbited for ~5 s and the bubble ended up exactly where
+            // it started — which felt like "I move it and it goes back".
+            if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
+                final float nx = (dragCx - gift.baseCx) / lastAvatarWidth;
+                final float ny = (dragCy - gift.baseCy) / lastAvatarHeight;
+                if (!Float.isNaN(nx) && !Float.isInfinite(nx) && !Float.isNaN(ny) && !Float.isInfinite(ny)) {
+                    gift.offsetX = clamp(nx, -6f, 6f);
+                    gift.offsetY = clamp(ny, -6f, 6f);
+                    savePosition(gift);
+                }
+            }
+            // A real flick — a short gesture that is still moving at the moment
+            // of release — still starts the orbit. A deliberate drag must not:
+            // it has to simply stay where it was dropped.
+            final boolean flick = speed > dp(1500)
+                    && (now - lastMoveTime) <= 110L
+                    && (now - dragStartTime) <= 520L;
+            if (flick) {
                 gift.settleStart = 0L;
                 startFlingSpin(speed, lastVelocityX, lastVelocityY);
             } else {
-                if (lastAvatarWidth > 0f && lastAvatarHeight > 0f) {
-                    final float nx = (dragCx - gift.baseCx) / lastAvatarWidth;
-                    final float ny = (dragCy - gift.baseCy) / lastAvatarHeight;
-                    if (!Float.isNaN(nx) && !Float.isInfinite(nx) && !Float.isNaN(ny) && !Float.isInfinite(ny)) {
-                        gift.offsetX = clamp(nx, -6f, 6f);
-                        gift.offsetY = clamp(ny, -6f, 6f);
-                        savePosition(gift);
-                    }
-                }
-                // Glide from the render position (which lags the finger) back
-                // into the saved slot.
+                // Glide from the render position (which lags the finger) into
+                // the saved slot, then stay put: collisions must not shove the
+                // bubble away from the point the user chose.
                 gift.settleStart = now;
                 gift.settleFromX = dragRenderX;
                 gift.settleFromY = dragRenderY;
                 gift.settleFromScale = dragLift;
+                gift.holdUntil = now + 800L;
             }
         }
         lastVelocityX = lastVelocityY = 0f;
@@ -2155,6 +3068,10 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     /** Fast release: all bubbles gather around the avatar and orbit it. */
     private void startFlingSpin(float speed, float vx, float vy) {
+        // An ongoing "gift of the day" ritual owns one bubble; release it first
+        // so the orbit is built from every gift and nothing is left attached
+        // to the companion mid-spin.
+        cancelGiftOfDay();
         flingSpinStart = SystemClock.uptimeMillis();
         // Long enough to actually enjoy the orbit: two turns minimum, ~5.6 s.
         flingSpinDuration = 5600L;
@@ -2189,6 +3106,11 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     private float dragPad() {
         return dpf2(24);
+    }
+
+    /** Topmost y a bubble may reach: below the status bar and the action bar. */
+    private float dragTop() {
+        return AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight() + dp(34);
     }
 
     /** Lowest y a dragged bubble may reach (above the system navigation bar). */

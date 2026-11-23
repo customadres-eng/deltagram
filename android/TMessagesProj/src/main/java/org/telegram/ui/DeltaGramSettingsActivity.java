@@ -324,6 +324,20 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                     BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
                             checked ? "Мяууу прилетела на профиль" : "Мяууу улетела").show();
                 });
+        addSwitch(content, "Подарок дня",
+                "Мяууу раз в сутки приносит один закреплённый подарок в центр профиля и показывает карточку. Тап по Мяууу — повторить",
+                DeltamentProfileMusic.isGiftOfDayEnabled(), (view, checked) -> {
+                    DeltamentProfileMusic.setGiftOfDayEnabled(checked);
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                            checked ? "Мяууу-почтальон включён" : "Подарок дня выключен").show();
+                });
+        addSwitch(content, "Живые созвездия",
+                "Соединяй подарки светящимися нитями: кнопка-звезда в правом нижнем углу профиля",
+                DeltamentProfileMusic.isConstellationsEnabled(), (view, checked) -> {
+                    DeltamentProfileMusic.setConstellationsEnabled(checked);
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                            checked ? "Созвездия включены" : "Созвездия выключены").show();
+                });
     }
 
     private void buildChats(LinearLayout content) {

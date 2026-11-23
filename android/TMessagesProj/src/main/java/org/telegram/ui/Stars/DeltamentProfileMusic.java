@@ -23,6 +23,10 @@ public final class DeltamentProfileMusic {
     private static final String PREF_PHYSICS = "dg_bubble_physics";
     /** The "Мяууу" companion that flies around the profile. */
     private static final String PREF_CAT = "dg_profile_cat";
+    /** Paimon brings one pinned gift to the centre once a day. */
+    private static final String PREF_GIFT_OF_DAY = "dg_gift_of_day";
+    /** User-drawn glowing links between the gift bubbles. */
+    private static final String PREF_CONSTELLATIONS = "dg_profile_constellations";
 
     private DeltamentProfileMusic() {
     }
@@ -41,6 +45,22 @@ public final class DeltamentProfileMusic {
 
     public static void setMusicEnabled(boolean enabled) {
         MessagesController.getGlobalMainSettings().edit().putBoolean(PREF_MUSIC, enabled).apply();
+    }
+
+    public static boolean isGiftOfDayEnabled() {
+        return MessagesController.getGlobalMainSettings().getBoolean(PREF_GIFT_OF_DAY, true);
+    }
+
+    public static void setGiftOfDayEnabled(boolean enabled) {
+        MessagesController.getGlobalMainSettings().edit().putBoolean(PREF_GIFT_OF_DAY, enabled).apply();
+    }
+
+    public static boolean isConstellationsEnabled() {
+        return MessagesController.getGlobalMainSettings().getBoolean(PREF_CONSTELLATIONS, true);
+    }
+
+    public static void setConstellationsEnabled(boolean enabled) {
+        MessagesController.getGlobalMainSettings().edit().putBoolean(PREF_CONSTELLATIONS, enabled).apply();
     }
 
     public static boolean isPhysicsEnabled() {
