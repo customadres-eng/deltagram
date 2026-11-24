@@ -105,6 +105,9 @@ android {
             debuggable false
             jniDebuggable false
             signingConfig signingConfigs.release
+            // Same package as the debug builds so the release APK upgrades
+            // over an installed beta without losing data.
+            applicationIdSuffix ".beta"
             // Keep this sideload build unminified. This avoids R8 failures in
             // the legacy Telegram fork while retaining the release package and
             // release signing configuration.
