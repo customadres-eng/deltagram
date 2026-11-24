@@ -47,7 +47,11 @@ def load_plugin(path, plugin_id):
     try:
         module_name = "dgplugin_" + "".join(
             ch if ch.isalnum() else "_" for ch in plugin_id)
-        spec = importlib.util.spec_from_file_location(module_name, path)
+        # importlib cannot infer a loader for the .plugin extension, so build
+        # the spec explicitly from a source loader.
+        from importlib.machinery import SourceFileLoader
+        loader = SourceFileLoader(module_name, path)
+        spec = importlib.util.spec_from_loader(module_name, loader)
         if spec is None or spec.loader is None:
             return "cannot load " + str(path)
         module = importlib.util.module_from_spec(spec)
