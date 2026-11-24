@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iamxvbaba/td/tg"
 	"github.com/iamxvbaba/td/tgerr"
@@ -452,6 +453,9 @@ func (r *Router) onPaymentsGetPaymentForm(ctx context.Context, req *tg.PaymentsG
 	if err != nil {
 		return nil, err
 	}
+	if !gift.PurchaseWindowOpen(r.clock.Now()) {
+		return nil, tgerr.New(400, "STARGIFT_USAGE_LIMITED")
+	}
 	if gift.RequirePremium && !r.viewerPremium(ctx, userID) {
 		return nil, tgerr400("PREMIUM_ACCOUNT_REQUIRED")
 	}
@@ -649,6 +653,9 @@ func (r *Router) onPaymentsSendStarsForm(ctx context.Context, req *tg.PaymentsSe
 	gift, err := r.starGiftFromCatalog(ctx, inv.GiftID)
 	if err != nil {
 		return nil, err
+	}
+	if !gift.PurchaseWindowOpen(r.clock.Now()) {
+		return nil, tgerr.New(400, "STARGIFT_USAGE_LIMITED")
 	}
 	buyerPremium := r.viewerPremium(ctx, userID)
 	if gift.RequirePremium && !buyerPremium {
@@ -961,6 +968,9 @@ func (r *Router) sendStarsTopupForm(ctx context.Context, userID, formID int64, i
 }
 
 func (r *Router) sendStarGiftToUser(ctx context.Context, senderID, recipientID int64, gift domain.StarGift, hideName bool, message string, messageEntities []domain.MessageEntity, prepaidUpgradeStars int64) (domain.SavedStarGiftRef, *tg.Updates, error) {
+	if domain.IsSystemUserID(recipientID) {
+		return domain.SavedStarGiftRef{}, nil, userIDInvalidErr()
+	}
 	unsaved, err := r.starGiftRecipientUnsaved(ctx, senderID, domain.Peer{Type: domain.PeerTypeUser, ID: recipientID})
 	if err != nil {
 		return domain.SavedStarGiftRef{}, nil, err
@@ -1570,8 +1580,17 @@ func tgStarGift(g domain.StarGift, now int64) *tg.StarGift {
 		gift.SetPerUserTotal(g.PerUserTotal)
 		gift.SetPerUserRemains(g.PerUserRemains)
 	}
-	if g.LockedUntilDate > 0 && int64(g.LockedUntilDate) > now {
-		gift.SetLockedUntilDate(g.LockedUntilDate)
+	lockedUntil := g.LockedUntilDate
+	if g.PurchaseWindowEnabled {
+		current := time.Unix(now, 0)
+		if !g.PurchaseWindowOpen(current) {
+			if next, ok := g.NextPurchaseWindowStart(current); ok {
+				lockedUntil = int(next.Unix())
+			}
+		}
+	}
+	if lockedUntil > 0 && int64(lockedUntil) > now {
+		gift.SetLockedUntilDate(lockedUntil)
 	}
 	if g.Auction {
 		gift.SetAuctionSlug(g.AuctionSlug)

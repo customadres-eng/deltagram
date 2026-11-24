@@ -128,9 +128,17 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 	if r.deps.Messages == nil {
 		return nil, false, peerIDInvalidErr()
 	}
-	if err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, p.allowPaidStars, 1); err != nil {
+	paidPrice, err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, p.allowPaidStars, 1)
+	if err != nil {
 		return nil, false, err
 	}
+	paid := false
+	if paidPrice > 0 {
+		if paid, err = r.debitPaidMessage(ctx, userID, peer.ID, paidPrice); err != nil {
+			return nil, false, err
+		}
+	}
+
 	if err := r.ensureVoiceMessagesAllowed(ctx, userID, peer, p.media != nil && p.media.HasUnreadPayload()); err != nil {
 		return nil, false, err
 	}
@@ -192,6 +200,9 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 		Effect:                 p.effect,
 	})
 	if err != nil {
+		if paid {
+			r.refundPaidMessage(ctx, userID, peer.ID, paidPrice)
+		}
 		fields := append(r.contextLogFields(ctx),
 			zap.Error(err),
 			zap.Int64("user_id", userID),
@@ -209,6 +220,10 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 	}
 	var users []tg.UserClass
 	var chats []tg.ChatClass
+	if res.Duplicate && paid {
+		// The original request already paid for this random_id.
+		r.refundPaidMessage(ctx, userID, peer.ID, paidPrice)
+	}
 	if !res.Duplicate {
 		users = r.usersForMessageUpdateWithPreloaded(ctx, userID, res.SenderMessage, projectedUsers)
 		chats = r.chatsForMessageUpdate(ctx, userID, res.SenderMessage)
@@ -221,7 +236,13 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 		r.maybeEnqueueWebPageResolve(userID, peer, res.SenderMessage.ID, res.SenderMessage.Media)
 		r.enqueueBotAPIPrivateMessageUpdateAsync(ctx, res)
 	}
-	return tgPrivateSendResultUpdates(res, p.randomID, true, users, chats), res.Duplicate, nil
+	updates := tgPrivateSendResultUpdates(res, p.randomID, true, users, chats)
+	if paid && !res.Duplicate {
+		if balance, err := r.deps.Stars.GetBalance(ctx, userID); err == nil {
+			updates.Updates = append(updates.Updates, &tg.UpdateStarsBalance{Balance: &tg.StarsAmount{Amount: balance.Balance}})
+		}
+	}
+	return updates, res.Duplicate, nil
 }
 
 // onMessagesUploadMedia 解析 InputMedia（上传或引用），返回可复用的 tg.MessageMedia。
@@ -541,7 +562,7 @@ func (r *Router) onMessagesSendMultiMedia(ctx context.Context, req *tg.MessagesS
 		if req.AllowPaidFloodskip {
 			return nil, paymentUnsupportedErr()
 		}
-		if err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, req.AllowPaidStars, absentCount); err != nil {
+		if _, err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, req.AllowPaidStars, absentCount); err != nil {
 			return nil, err
 		}
 	}

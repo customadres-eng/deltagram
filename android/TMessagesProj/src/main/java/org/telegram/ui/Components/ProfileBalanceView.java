@@ -188,6 +188,12 @@ public class ProfileBalanceView extends ProfileMusicView {
     }
 
     @Override // org.telegram.ui.Components.ProfileMusicView
+    protected boolean hasTextContent() {
+        // The pill draws GRAM and STARS amounts instead of a song title.
+        return this.gramAmount != null && this.starsAmount != null;
+    }
+
+    @Override // org.telegram.ui.Components.ProfileMusicView
     public float getContentWidth(float f) {
         this.gramAmount.ellipsize(-1.0f);
         this.starsAmount.ellipsize(-1.0f);

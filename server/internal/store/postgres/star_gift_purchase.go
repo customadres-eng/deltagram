@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -262,6 +263,7 @@ func (s *StarGiftLifecycleStore) prepareStarGiftPurchase(ctx context.Context, tx
 	}
 	gift, found, err := NewStarGiftStore(tx).CatalogRevision(ctx, revisionID)
 	if err != nil || !found || !enabled || gift.ID != req.GiftID || gift.SoldOut || gift.Auction || gift.LockedUntilDate > req.Date ||
+		!gift.PurchaseWindowOpen(time.Unix(int64(req.Date), 0)) ||
 		gift.Limited && remains <= 0 {
 		return domain.StarGift{}, domain.SavedStarGift{}, domain.StarsBalance{}, domain.ErrStarGiftInvalid
 	}
@@ -355,7 +357,7 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, req.BuyerUserID, req.CommandKey, req.Gi
 		savedID, req.FormID, charge, balance, req.Date)
 	return err
 }
-	func (s *StarGiftLifecycleStore) loadStarGiftPurchaseReplay(ctx context.Context, req domain.StarGiftPurchaseRequest, sent domain.SendPrivateTextResult) (domain.StarGiftPurchaseResult, bool, error) {
+func (s *StarGiftLifecycleStore) loadStarGiftPurchaseReplay(ctx context.Context, req domain.StarGiftPurchaseRequest, sent domain.SendPrivateTextResult) (domain.StarGiftPurchaseResult, bool, error) {
 	var giftID, recipientID, savedID, formID, charge, balance int64
 	var recipientType string
 	err := s.db.QueryRow(ctx, `SELECT gift_id,recipient_peer_type,recipient_peer_id,saved_gift_id,form_id,charge_stars,balance_after

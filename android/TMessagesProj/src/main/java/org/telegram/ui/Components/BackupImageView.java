@@ -360,14 +360,14 @@ public class BackupImageView extends View {
         if (blurAllowed) {
             blurImageReceiver.draw(canvas);
         }
-        if (deltagramFrameUserId != 0 && imageReceiver.hasImageLoaded()) {
+        if (deltagramFrameUserId != 0) {
             android.graphics.Rect frameBounds = AndroidUtilities.rectTmp2;
             frameBounds.set(
                     (int) imageReceiver.getImageX(),
                     (int) imageReceiver.getImageY(),
                     (int) imageReceiver.getImageX2(),
                     (int) imageReceiver.getImageY2());
-            org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, deltagramFrameUserId);
+            org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, deltagramFrameUserId, this);
         }
     }
 

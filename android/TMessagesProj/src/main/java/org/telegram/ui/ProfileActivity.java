@@ -151,6 +151,7 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.DeltagramBanners;
 import org.telegram.messenger.DeltagramCards;
+import org.telegram.messenger.DeltagramVerifications;
 import org.telegram.ui.Wallet.DeltamentPublicCardSheet;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
@@ -565,15 +566,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     };
 
     private HashMap<Integer, Integer> positionToOffset = new HashMap<>();
-
-    // DeltaGram: "Profile v2 (iOS)" — larger centered avatar, capsule action
-    // buttons and gift bubbles orbiting the photo, like Telegram for iOS.
-    public static final String PROFILE_V2_PREF = "dg_profile_v2";
-    private boolean profileV2;
-
-    public static boolean isProfileV2Enabled() {
-        return MessagesController.getGlobalMainSettings().getBoolean(PROFILE_V2_PREF, true);
-    }
 
     private float avatarX;
     private float avatarY;
@@ -1413,6 +1405,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (musicView != null) {
                 musicView.setButtonColor(btnColor, hasColorById);
             }
+            if (balanceView != null) {
+                balanceView.setButtonColor(btnColor, hasColorById);
+            }
 
             int gradientX = getWidth() / 2;
             if (backgroundGradient == null || backgroundGradientColor1 != color1 || backgroundGradientColor2 != color2 || backgroundGradientX != gradientX) {
@@ -1445,17 +1440,22 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (banner != null && !banner.isRecycled()) {
                     // DeltaGram: an uploaded profile banner replaces the color
                     // gradient behind the avatar.
-                    final float scale = Math.max(getMeasuredWidth() / (float) banner.getWidth(), y1 / (float) banner.getHeight());
+                    final float scale = getMeasuredWidth() / (float) banner.getWidth();
                     final int srcW = Math.min(banner.getWidth(), (int) (getMeasuredWidth() / scale));
                     final int srcH = Math.min(banner.getHeight(), (int) (y1 / scale));
                     final int srcX = (banner.getWidth() - srcW) / 2;
                     final int srcY = (banner.getHeight() - srcH) / 2;
                     bannerSrc.set(srcX, srcY, srcX + srcW, srcY + srcH);
                     bannerDst.set(0, 0, getMeasuredWidth(), y1);
-                    bannerPaint.setAlpha((int) (0xFF * progressToGradient));
+                    // Banner visibility must not depend on whether this peer
+                    // has a custom profile color (the default is false).
+                    final float bannerAlpha = playProfileAnimation == 0 ? 1f : avatarAnimationProgress;
+                    bannerPaint.setAlpha((int) (0xFF * bannerAlpha));
                     canvas.drawBitmap(banner, bannerSrc, bannerDst, bannerPaint);
-                    bannerPaint.setAlpha((int) (0x44 * progressToGradient));
+                    bannerPaint.setShader(null);
+                    bannerPaint.setColor(0x44000000);
                     canvas.drawRect(0, 0, getMeasuredWidth(), y1, bannerPaint);
+                    bannerPaint.setColor(Color.WHITE);
                 }
                 if (progressToGradient < 1 && banner == null) {
                     canvas.drawRect(0, 0, getMeasuredWidth(), y1, paint);
@@ -2186,7 +2186,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public boolean onFragmentCreate() {
-        profileV2 = isProfileV2Enabled();
         userId = arguments.getLong("user_id", 0);
         chatId = arguments.getLong("chat_id", 0);
         topicId = arguments.getLong("topic_id", 0);
@@ -3261,6 +3260,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         if (musicView != null) {
                             musicView.setParentExpanded(1f);
                         }
+                        if (balanceView != null) {
+                            balanceView.setParentExpanded(1f);
+                        }
                         if (ratingView != null) {
                             ratingView.setParentExpanded(1f);
                         }
@@ -3971,23 +3973,29 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         sharedMediaLayout.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.MATCH_PARENT));
         sharedMediaLayout.initBlurCapture((ViewGroup) fragmentView);
 //        sharedMediaLayout.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        // Both balances are public on the card, so every profile needs the pill,
+        // not only the own one where the music view is created.
+        balanceView = new ProfileBalanceView(context, resourcesProvider);
+        balanceView.setOnClickListener(v -> {
+            int tappedKind = balanceView.tappedKind();
+            if (tappedKind < 0) {
+                return;
+            }
+            openCardsSheet(tappedKind);
+        });
         if (userId == 0 || imageUpdater == null || myProfile) {
             musicView = new ProfileMusicView(context, resourcesProvider);
-            balanceView = new ProfileBalanceView(context, resourcesProvider);
-            musicView.setTrailingView(balanceView);
-            balanceView.setOnClickListener(v -> {
-                int tappedKind = balanceView.tappedKind();
-                if (tappedKind < 0) {
-                    return;
-                }
-                openCardsSheet(tappedKind);
-            });
             if (avatarsBlurView != null) {
                 avatarsBlurView.setMusicView(musicView);
             }
             musicView.setColor(peerColor);
             if (userInfo != null && userInfo.saved_music != null) {
                 musicView.setMusicDocument(userInfo.saved_music);
+                musicView.setVisibility(View.VISIBLE);
+            } else if (myProfile) {
+                // DeltaGram: the own profile always keeps an entry point to the
+                // SoundCloud player, even without a profile track.
+                musicView.setText("SoundCloud", " · DeltaGram Music");
                 musicView.setVisibility(View.VISIBLE);
             } else {
                 musicView.setVisibility(View.GONE);
@@ -5479,14 +5487,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (animatedEmojiDrawable != null && animatedEmojiDrawable.getImageReceiver() != null) {
                     animatedEmojiDrawable.getImageReceiver().startAnimation();
                 }
-                if (userId != 0 && currentChat == null && getImageReceiver().hasImageLoaded()) {
+                if (userId != 0 && currentChat == null) {
                     Rect frameBounds = AndroidUtilities.rectTmp2;
                     frameBounds.set(
                             (int) getImageReceiver().getImageX(),
                             (int) getImageReceiver().getImageY(),
                             (int) getImageReceiver().getImageX2(),
                             (int) getImageReceiver().getImageY2());
-                    org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, userId);
+                    org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, userId, this);
                 }
             }
         };
@@ -5633,7 +5641,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (musicView != null) {
             avatarsBlurView.setMusicView(musicView);
             avatarContainer2.addView(musicView, LayoutHelper.createFrame(-1, -1));
-            avatarContainer2.addView(balanceView, LayoutHelper.createFrame(-1, -1));
+        }
+        if (balanceView != null) {
+            avatarContainer2.setClipChildren(false);
+            avatarContainer2.addView(balanceView, LayoutHelper.createFrame(-1, AndroidUtilities.dp(37), Gravity.TOP | Gravity.CENTER_HORIZONTAL));
         }
         avatarImage.setAvatarsViewPager(avatarsViewPager);
 
@@ -5695,7 +5706,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 nameTextView[a].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
             }
             nameTextView[a].setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(a == 0 ? 12 : 4));
-            nameTextView[a].setTextSizePx(dp(profileV2 ? 19f : 17.5f));
+            nameTextView[a].setTextSizePx(dp(17.5f));
             nameTextView[a].setGravity(Gravity.LEFT);
             nameTextView[a].setTypeface(AndroidUtilities.bold());
             nameTextView[a].setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
@@ -5761,7 +5772,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             onlineTextView[a].setEllipsizeByGradient(true);
             onlineTextView[a].setTextColor(applyPeerColor(getThemedColor(Theme.key_actionBarDefaultSubtitle), true, null));
-            onlineTextView[a].setTextSizePx(dp(profileV2 ? 14.5f : 13.5f));
+            onlineTextView[a].setTextSizePx(dp(13.5f));
             onlineTextView[a].setGravity(Gravity.LEFT);
             onlineTextView[a].setAlpha(a == 0 ? 0.0f : 1.0f);
             onlineTextView[a].setPivotX(dp(8));
@@ -5839,9 +5850,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         avatarContainer2.addView(storyView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         giftsView = new ProfileGiftsView(context, currentAccount, getDialogId(), avatarContainer, avatarImage, resourcesProvider);
-        // Draw the gift bubbles on top of the other header children so the
-        // long-press drag can receive touches. ProfileGiftsView returns false
-        // when the touch misses a bubble, so taps still reach the views below.
         avatarContainer2.addView(giftsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         updateProfileData(true);
 
@@ -6168,13 +6176,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int getHeaderOnlyExtraHeight() {
-        // Profile v2 uses a 108dp avatar instead of 96dp, so the header needs
-        // 12dp more room for the centered name and status underneath it.
-        final int extra = profileV2 ? 12 : 0;
         if (getActionsExtraHeight() == 0) {
-            return dp(168f + extra);
+            return dp(168f);
         }
-        return dp(152f + extra);
+        return dp(152f);
     }
 
     private int getActionsExtraHeight() {
@@ -6183,7 +6188,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private int getActionsExtraHeight(boolean withPills) {
         if (userId != 0 && imageUpdater != null && !myProfile)
             return 0;
-        return dp(74 + (withPills && (hasMusic || hasBalance) ? 25 : 0));
+        return dp(74 + (withPills && hasMusic ? 25 : 0) + (withPills && hasBalance ? 25 : 0));
     }
 
     private int getHeaderExtraHeight() {
@@ -6434,6 +6439,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         if (musicView != null) {
             musicView.setParentExpanded(value);
+        }
+        if (balanceView != null) {
+            balanceView.setParentExpanded(value);
         }
         if (searchItem != null) {
             searchItem.setAlpha(1.0f - value);
@@ -7561,7 +7569,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     org.telegram.messenger.DeltagramCards.cardFor(userId);
             if (publicCard != null && getParentActivity() != null) {
                 showDialog(new org.telegram.ui.Wallet.DeltamentPublicCardSheet(
-                        getParentActivity(), currentAccount, publicCard, resourcesProvider));
+                        getParentActivity(), currentAccount, publicCard, 0, resourcesProvider));
             } else {
                 org.telegram.messenger.DeltagramCards.refreshRegistry(currentAccount);
             }
@@ -8592,7 +8600,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             float h = openAnimationInProgress ? initialAnimationExtraHeight : extraHeight;
             if (h > headerExtraHeight || isPulledDown) {
                 expandProgress = Math.max(0f, Math.min(1f, (h - headerExtraHeight) / (listView.getMeasuredWidth() - newTop - getHeaderOnlyExtraHeight())));
-                avatarScale = lerp(profileV2 ? 108 / 42f : 96 / 42f, 138 / 42f, Math.min(1f, expandProgress * 3f)) / 100f * 42f;
+                avatarScale = lerp(96 / 42f, 138 / 42f, Math.min(1f, expandProgress * 3f)) / 100f * 42f;
                 pullUpProgress = 0.0f;
 
                 if (storyView != null) {
@@ -8856,14 +8864,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 updateCollectibleHint();
             } else if (h <= headerExtraHeight) {
                 if (openAnimationInProgress) {
-                    avatarScale = lerp(42, profileV2 ? 108 : 96, diff) / 100f;
+                    avatarScale = lerp(42, 96, diff) / 100f;
                     pullUpProgress = 0.0f;
                 } else {
                     float intoSize = 24f;
                     if (avatarGooey != null && avatarGooey.notchInfo != null && avatarGooey.notchInfo.isLikelyCircle) {
                         intoSize = 0.5f * avatarGooey.notchInfo.bounds.width() / AndroidUtilities.density;
                     }
-                    avatarScale = lerp(intoSize, profileV2 ? 108 : 96, diff) / 100f;
+                    avatarScale = lerp(intoSize, 96, diff) / 100f;
                     pullUpProgress = 1.0f - diff;
                 }
 
@@ -9066,7 +9074,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private void refreshNameAndOnlineYBasedOnExpand(float diff, float newTop) {
         float scale;
-        final float restingAvatar = profileV2 ? 108f : 96f;
+        final float restingAvatar = 96f;
         float expand = Math.max(0f, Math.min(1f, (extraHeight - getHeaderExtraHeight()) / (listView.getMeasuredWidth() - newTop - getHeaderOnlyExtraHeight())));
         if (extraHeight < getHeaderExtraHeight() && expand < 0.33f) {
             scale = (24 + (restingAvatar - 24) * diff) / 42.0f;
@@ -9754,7 +9762,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             DeltagramCards.refreshRegistry(currentAccount);
             return;
         }
-        showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, resourcesProvider));
+        showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, kind, resourcesProvider));
     }
 
     private void startAvatarParallax() {
@@ -10024,6 +10032,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         if (musicView != null) {
                             musicView.setParentExpanded(0);
                         }
+                        if (balanceView != null) {
+                            balanceView.setParentExpanded(0);
+                        }
                     }
                     openAnimationInProgress = false;
                     checkListViewScroll();
@@ -10066,6 +10077,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             }
             if (musicView != null) {
                 musicView.setParentExpanded(progress);
+            }
+            if (balanceView != null) {
+                balanceView.setParentExpanded(progress);
             }
             if (ratingView != null) {
                 ratingView.setParentExpanded(progress);
@@ -10868,13 +10882,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             TLRPC.User user = getMessagesController().getUser(userId);
             if (userInfo != null && userInfo.saved_music != null && (imageUpdater == null || myProfile)) {
                 hasMusic = true;
-            }
-            // DeltaGram: the own profile always shows the music pill; it opens
-            // the built-in player even when no saved track is set.
-            if (myProfile) {
+            } else if (myProfile && musicView != null) {
                 hasMusic = true;
             }
-
             if (emptyRow < 0 && emptyRow2 < 0) {
                 if (hasMusic || hasBalance || peerColor != null || actionsView == null) {
                     emptyRow2 = rowCount++;
@@ -11324,8 +11334,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (musicView != null) {
             updateMusicPill();
             musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
-            updateCardsBalance();
             musicView.invalidate();
+        }
+        if (balanceView != null) {
+            updateBalancePosition();
+            updateCardsBalance();
             balanceView.invalidate();
         }
     }
@@ -11500,10 +11513,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             actionsView.updatePosition(listView.getMeasuredWidth(), dp(74));
         } else {
             actionsView.clipHeight = -1;
-            float bottom = extraHeight + newTop - dp(hasMusic || hasBalance ? 25 : 0);
+            float bottom = extraHeight + newTop - dp((hasMusic ? 25 : 0) + (hasBalance ? 25 : 0));
             float height = Math.min(dp(74), bottom - newTop);
             actionsView.updatePosition(bottom - height, height);
         }
+
+        updateBalancePosition();
 
         if (callToActionItem != null && callToActionItem.getTag() != null) {
             actionsView.isAnimatingCallAction = false;
@@ -11538,6 +11553,19 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             float height = Math.min(getActionsExtraHeight(), bottom - newTop);
             musicView.updatePosition(bottom - height, height - dp(74));
         }
+        updateBalancePosition();
+    }
+
+    private void updateBalancePosition() {
+        if (balanceView == null || actionBar == null) {
+            return;
+        }
+        final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
+        // Follow the collapsing profile header, not the fixed action bar.
+        // Each pill occupies its own 25dp row after the action buttons.
+        final float top = newTop + extraHeight - dp(25);
+        balanceView.updatePosition(top, Math.min(dp(37), Math.max(0, top - newTop)));
+        balanceView.setAlpha(Math.min(1f, Math.max(0f, (top - newTop - dp(32)) / dp(25))));
     }
 
     private MessagesController.PeerColor peerColor;
@@ -11788,9 +11816,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         nameTextView[a].setRightDrawable(null);
                     }
                 }
-                if (leftIcon == null && currentEncryptedChat == null && user.bot_verification_icon != 0) {
+                // A full-profile response can arrive after the lightweight user
+                // object. Prefer its verification when the cached user is stale.
+                long verificationIcon = user.bot_verification_icon != 0
+                        ? user.bot_verification_icon
+                        : userInfo != null && userInfo.bot_verification != null
+                        ? userInfo.bot_verification.icon : DeltagramVerifications.iconFor(userId);
+                if (leftIcon == null && currentEncryptedChat == null && verificationIcon != 0) {
                     nameTextView[a].setLeftDrawableOutside(true);
-                    leftIcon = getBotVerificationDrawable(user.bot_verification_icon, false, a);
+                    leftIcon = getBotVerificationDrawable(verificationIcon, false, a);
                 } else {
                     nameTextView[a].setLeftDrawableOutside(false);
                 }
@@ -12106,10 +12140,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         nameTextView[a].setRightDrawable(null);
                     }
                 }
-                if (chat.bot_verification_icon != 0) {
+                long verificationIcon = chat.bot_verification_icon != 0
+                        ? chat.bot_verification_icon
+                        : chatInfo != null && chatInfo.bot_verification != null
+                        ? chatInfo.bot_verification.icon : 0;
+                if (verificationIcon != 0) {
                     nameTextView[a].setLeftDrawableOutside(true);
-                    nameTextView[a].setLeftDrawable(getBotVerificationDrawable(chat.bot_verification_icon, false, a));
+                    nameTextView[a].setLeftDrawable(getBotVerificationDrawable(verificationIcon, false, a));
                 } else {
+                    nameTextView[a].setLeftDrawableOutside(false);
                     nameTextView[a].setLeftDrawable(null);
                 }
                 if (a == 0 && onlineTextOverride != null) {
@@ -12276,6 +12315,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         if (musicView != null) {
             musicView.setColor(peerColor);
+        }
+        if (balanceView != null) {
+            balanceView.setColor(peerColor);
         }
         AndroidUtilities.forEachViews(listView, view -> {
             if (view instanceof HeaderCell) {
@@ -13241,12 +13283,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private void pickBanner() {
         if (getParentActivity() == null) return;
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             startActivityForResult(Intent.createChooser(intent, LocaleController.getString(R.string.DeltaGramSetBanner)), 5002);
         } catch (Exception e) {
             FileLog.e(e);
+            try {
+                Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+                fallback.setType("image/*");
+                fallback.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivityForResult(Intent.createChooser(fallback, LocaleController.getString(R.string.DeltaGramSetBanner)), 5002);
+            } catch (Exception second) {
+                FileLog.e(second);
+                BulletinFactory.of(this).createErrorBulletin("Не удалось открыть выбор фото").show();
+            }
         }
     }
 
@@ -13266,20 +13319,38 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             try (java.io.InputStream is2 = getParentActivity().getContentResolver().openInputStream(uri)) {
                 bitmap = BitmapFactory.decodeStream(is2, null, opts);
             }
-            if (bitmap == null) return;
+            if (bitmap == null) {
+                BulletinFactory.of(this).createErrorBulletin("Не удалось прочитать изображение").show();
+                return;
+            }
+            // Crop to the profile banner cover ratio before upload. Without this
+            // a tall photo is scaled by width and appears extremely zoomed in.
+            final int sourceW = bitmap.getWidth(), sourceH = bitmap.getHeight();
+            int cropW = sourceW, cropH = Math.max(1, Math.round(sourceW / 3f));
+            if (cropH > sourceH) {
+                cropH = sourceH;
+                cropW = Math.max(1, Math.round(sourceH * 3f));
+            }
+            final int cropX = Math.max(0, (sourceW - cropW) / 2);
+            final int cropY = Math.max(0, (sourceH - cropH) / 2);
+            if (cropW != sourceW || cropH != sourceH) {
+                Bitmap cropped = Bitmap.createBitmap(bitmap, cropX, cropY, cropW, cropH);
+                if (cropped != bitmap) bitmap.recycle();
+                bitmap = cropped;
+            }
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out);
             byte[] bytes = out.toByteArray();
-            int width = bitmap.getWidth(), height = bitmap.getHeight();
             bitmap.recycle();
             DeltagramCards.uploadBanner(currentAccount, bytes, "image/jpeg", (token, error) -> {
-                if (error != null) {
-                    BulletinFactory.of(this).createErrorBulletin(error).show();
+                if (error != null || TextUtils.isEmpty(token)) {
+                    BulletinFactory.of(this).createErrorBulletin(error != null ? error : "Баннер не сохранён").show();
                     return;
                 }
-                DeltagramBanners.refreshNow();
+                DeltagramBanners.setUploaded(getUserConfig().getClientUserId(), token, bytes);
                 BulletinFactory.of(this).createSuccessBulletin("Баннер обновлён").show();
                 if (listAdapter != null) listAdapter.notifyDataSetChanged();
+                if (topView != null) topView.invalidate();
                 if (fragmentView != null) fragmentView.invalidate();
             });
         } catch (Exception e) {
@@ -13292,7 +13363,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
         if (requestCode == 5002) {
             if (resultCode == android.app.Activity.RESULT_OK && data != null) {
-                uploadBanner(data.getData());
+                Uri selected = data.getData();
+                if (selected == null && data.getClipData() != null && data.getClipData().getItemCount() > 0) {
+                    selected = data.getClipData().getItemAt(0).getUri();
+                }
+                if (selected != null) {
+                    uploadBanner(selected);
+                } else {
+                    BulletinFactory.of(this).createErrorBulletin("Фото не выбрано").show();
+                }
             }
             return;
         }
@@ -14345,8 +14424,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         final long did = getDialogId();
                         TLObject obj = getMessagesController().getUserOrChat(did);
                         TL_bots.BotVerification bot_verification = userInfo != null ? userInfo.bot_verification : chatInfo != null ? chatInfo.bot_verification : null;
+                        long fallbackIcon = userId != 0 && bot_verification == null
+                                ? DeltagramVerifications.iconFor(userId) : 0;
                         Long bot_manager_id = userInfo != null && TLObject.hasFlag(userInfo.flags2, TLObject.FLAG_25) ? userInfo.bot_manager_id : null;
-                        if (botAppRow >= 0 || bot_verification != null || bot_manager_id != null) {
+                        if (botAppRow >= 0 || bot_verification != null || fallbackIcon != 0 || bot_manager_id != null) {
                             cell.setFixedSize(0);
                             final TLRPC.User user = getMessagesController().getUser(userId);
                             final boolean botOwner = user != null && user.bot && user.bot_can_edit;
@@ -14356,15 +14437,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                                 sb.append(AndroidUtilities.replaceSingleTag(getString(botOwner ? R.string.ProfileBotOpenAppInfoOwner : R.string.ProfileBotOpenAppInfo), () -> {
                                     Browser.openUrl(getContext(), getString(botOwner ? R.string.ProfileBotOpenAppInfoOwnerLink : R.string.ProfileBotOpenAppInfoLink));
                                 }));
-                                if (bot_verification != null || bot_manager_id != null) {
+                                if (bot_verification != null || fallbackIcon != 0 || bot_manager_id != null) {
                                     sb.append("\n\n\n");
                                 }
                             }
-                            if (bot_verification != null) {
+                            if (bot_verification != null || fallbackIcon != 0) {
                                 sb.append("x");
-                                sb.setSpan(new AnimatedEmojiSpan(bot_verification.icon, cell.getTextView().getPaint().getFontMetricsInt()), sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                sb.setSpan(new AnimatedEmojiSpan(bot_verification != null ? bot_verification.icon : fallbackIcon,
+                                        cell.getTextView().getPaint().getFontMetricsInt()), sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                                 sb.append(" ");
-                                SpannableString description = new SpannableString(MessageObject.formatTextWithEntities(bot_verification.description));
+                                SpannableString description = new SpannableString(bot_verification != null
+                                        ? MessageObject.formatTextWithEntities(bot_verification.description)
+                                        : "Подтверждён сторонней организацией");
                                 try {
                                     AndroidUtilities.addLinksSafe(description, Linkify.WEB_URLS, false, false);
                                     URLSpan[] spans = description.getSpans(0, description.length(), URLSpan.class);

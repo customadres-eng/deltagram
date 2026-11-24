@@ -124,6 +124,7 @@ type TON interface {
 // CardPrefsStore backs the public DeltaGram card registry.
 type CardPrefsStore interface {
 	CardRegistry(ctx context.Context) ([]domain.CardPublic, error)
+	CardHistory(ctx context.Context, userID int64) ([]domain.CardHistoryEntry, error)
 	CardPrefs(ctx context.Context, userID int64) (domain.CardPrefs, error)
 	SetCardPrefs(ctx context.Context, p domain.CardPrefs) error
 	ResolveUsername(ctx context.Context, username string) (int64, error)

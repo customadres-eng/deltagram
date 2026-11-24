@@ -439,6 +439,27 @@ public class WalletCardComponent extends FrameLayout implements NotificationCent
         return frontFace;
     }
 
+    /**
+     * DeltaGram: the QR badge on the card is a real hit target. The stock card
+     * only exposes a whole-card click, so tapping the badge did nothing.
+     */
+    public void setOnQrClickListener(View.OnClickListener listener) {
+        if (frontFace == null) {
+            return;
+        }
+        View old = frontFace.findViewWithTag("deltagram_qr_hit");
+        if (old != null) {
+            frontFace.removeView(old);
+        }
+        if (listener == null) {
+            return;
+        }
+        View hit = new View(getContext());
+        hit.setTag("deltagram_qr_hit");
+        hit.setOnClickListener(listener);
+        frontFace.addView(hit, LayoutHelper.createFrame(48, 36, Gravity.LEFT | Gravity.TOP, 242, 74, 0, 0));
+    }
+
     public View getBalanceAnchor() {
         return balanceAnchor;
     }

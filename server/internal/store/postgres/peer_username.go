@@ -56,13 +56,31 @@ func getPeerUsernameOwner(ctx context.Context, db sqlcgen.DBTX, usernameLower st
 	}
 	var owner peerUsernameOwner
 	err := db.QueryRow(ctx, query, usernameLower).Scan(&owner.peerType, &owner.peerID, &owner.collectible, &owner.active, &owner.editable)
-	if err != nil {
+	if err == nil {
+		return owner, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return peerUsernameOwner{}, false, fmt.Errorf("get peer username owner: %w", err)
+	}
+	// An auction/escrow vault may hold a collectible name after its registry
+	// projection was removed. The name is still reserved: nobody may claim it
+	// as a channel/account username while the asset exists.
+	collectibleQuery := `SELECT COALESCE(owner_peer_type, ''), COALESCE(owner_peer_id, 0)
+FROM collectible_usernames
+WHERE username_lower = $1 AND status <> 'burned'
+ORDER BY id DESC LIMIT 1`
+	if forUpdate {
+		collectibleQuery += ` FOR UPDATE`
+	}
+	var ownerType string
+	var ownerID int64
+	if err := db.QueryRow(ctx, collectibleQuery, usernameLower).Scan(&ownerType, &ownerID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return peerUsernameOwner{}, false, nil
 		}
-		return peerUsernameOwner{}, false, fmt.Errorf("get peer username owner: %w", err)
+		return peerUsernameOwner{}, false, fmt.Errorf("get collectible username owner: %w", err)
 	}
-	return owner, true, nil
+	return peerUsernameOwner{peerType: ownerType, peerID: ownerID, collectible: true, active: false, editable: false}, true, nil
 }
 
 func peerUsernameAvailable(ctx context.Context, db sqlcgen.DBTX, usernameLower, peerType string, peerID int64) (bool, error) {

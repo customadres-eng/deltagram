@@ -3,7 +3,6 @@ package org.telegram.ui.Wallet;
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.text.InputType;
@@ -11,7 +10,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -23,34 +21,20 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-/** Pick the public colour and NFT of the DeltaGram wallet card. */
+/** Pick the public colour of the DeltaGram wallet card. */
 public class DeltamentCardSettingsActivity extends BaseFragment {
 
     private final int currentAccount = UserConfig.selectedAccount;
     private int colorId = -1;
-    private long nftRowId;
-    private float nftX = 0.5f;
-    private float nftY = 0.5f;
-    private float nftScale = 0.231f;
-    private float nftRotation;
     private WalletCardComponent preview;
-    private DeltamentNftSticker nftSticker;
     private LinearLayout colorsRow;
-    private LinearLayout nftsRow;
     private ButtonWithCounterView saveButton;
     private EditTextBoldCursor addressEdit;
-    private final Map<Long, String> nftUrls = new HashMap<>();
 
     @Override
     public View createView(Context context) {
@@ -81,17 +65,10 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
         preview.setCardNumber("GRAM " + UserConfig.getInstance(currentAccount).getClientUserId());
         preview.setDiamondOnCard(true);
         previewBox.addView(preview, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-        nftSticker = new DeltamentNftSticker(context, preview, true);
-        nftSticker.setOnChanged(() -> {
-            nftX = nftSticker.getNftX();
-            nftY = nftSticker.getNftY();
-            nftScale = nftSticker.getNftScale();
-            nftRotation = nftSticker.getNftRotation();
-        });
         content.addView(previewBox, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         TextView note = new TextView(context);
-        note.setText("Так карту увидят другие пользователи в вашем профиле. Цвет и NFT сохраняются на сервере DeltaGram.");
+        note.setText("Так карту увидят другие пользователи в вашем профиле. Цвет сохраняется на сервере DeltaGram.");
         note.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         note.setLineSpacing(dp(2), 1f);
@@ -142,14 +119,6 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
         });
         content.addView(addressSave, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44, 0f, 0, 0, 0));
 
-        content.addView(section(context, "NFT на карте"));
-        HorizontalScrollView nftScroll = new HorizontalScrollView(context);
-        nftScroll.setHorizontalScrollBarEnabled(false);
-        nftsRow = new LinearLayout(context);
-        nftsRow.setOrientation(LinearLayout.HORIZONTAL);
-        nftScroll.addView(nftsRow);
-        content.addView(nftScroll, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-
         saveButton = new ButtonWithCounterView(context, resourceProvider).setRound();
         saveButton.setText("Сохранить", false);
         saveButton.setOnClickListener(v -> save());
@@ -159,17 +128,9 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
         DeltagramCards.prefs(currentAccount, (p, error) -> {
             if (p != null) {
                 colorId = p.colorId;
-                nftRowId = p.nftRowId;
-                nftX = p.nftX;
-                nftY = p.nftY;
-                nftScale = p.nftScale;
-                nftRotation = p.nftRotation;
                 applyPreview();
                 updateColorSelection();
             }
-        });
-        DeltagramCards.nfts(currentAccount, (list, error) -> {
-            if (list != null) rebuildNfts(context, list);
         });
         if (addressEdit != null) {
             DeltagramCards.PublicCard own = DeltagramCards.cardFor(UserConfig.getInstance(currentAccount).getClientUserId());
@@ -245,79 +206,14 @@ public class DeltamentCardSettingsActivity extends BaseFragment {
         }
     }
 
-    private void rebuildNfts(Context context, List<DeltagramCards.Nft> list) {
-        nftsRow.removeAllViews();
-        addNftCell(context, 0, null, "Без NFT");
-        for (DeltagramCards.Nft nft : list) {
-            nftUrls.put(nft.rowId, nft.url);
-            addNftCell(context, nft.rowId, nft.url, nft.title);
-        }
-        if (list.isEmpty()) {
-            TextView empty = new TextView(context);
-            empty.setText("У вас пока нет NFT");
-            empty.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-            empty.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            empty.setPadding(0, dp(8), 0, dp(8));
-            nftsRow.addView(empty, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
-        }
-        applyPreview();
-        updateNftSelection();
-    }
-
-    private void addNftCell(Context context, long rowId, String url, String title) {
-        FrameLayout cell = new FrameLayout(context);
-        cell.setTag(rowId);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(14));
-        bg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
-        cell.setBackground(bg);
-        cell.setPadding(dp(4), dp(4), dp(4), dp(4));
-
-        if (url != null && !url.isEmpty()) {
-            BackupImageView image = new BackupImageView(context);
-            image.setRoundRadius(dp(10));
-            image.setImage(url, "140_140", (Drawable) null);
-            cell.addView(image, LayoutHelper.createFrame(64, 64));
-        } else {
-            TextView none = new TextView(context);
-            none.setText("—");
-            none.setGravity(Gravity.CENTER);
-            none.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-            none.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
-            cell.addView(none, LayoutHelper.createFrame(64, 64, Gravity.CENTER));
-        }
-        cell.setOnClickListener(v -> {
-            nftRowId = rowId;
-            applyPreview();
-            updateNftSelection();
-        });
-        nftsRow.addView(cell, LayoutHelper.createLinear(72, 72, 0, 0, dp(8), 0));
-    }
-
-    private void updateNftSelection() {
-        if (nftsRow == null) return;
-        for (int i = 0; i < nftsRow.getChildCount(); i++) {
-            View cell = nftsRow.getChildAt(i);
-            Object tag = cell.getTag();
-            boolean selected = tag instanceof Long && (Long) tag == nftRowId;
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(dp(14));
-            bg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
-            bg.setStroke(dp(selected ? 2 : 0), selected ? 0xffe5323f : 0x00000000);
-            cell.setBackground(bg);
-        }
-    }
-
     private void applyPreview() {
         if (preview == null) return;
         DeltamentCardStyle.apply(preview, colorId);
-        nftSticker.setNft(nftRowId == 0 ? null : nftUrls.get(nftRowId), nftX, nftY, nftScale, nftRotation);
-        if (nftRowId > 0) updateNftSelection();
     }
 
     private void save() {
         saveButton.setLoading(true);
-        DeltagramCards.savePrefs(currentAccount, colorId, nftRowId, nftX, nftY, nftScale, nftRotation, (p, error) -> {
+        DeltagramCards.savePrefs(currentAccount, colorId, 0, 0.5f, 0.5f, 0.231f, 0, (p, error) -> {
             saveButton.setLoading(false);
             if (error != null) {
                 BulletinFactory.of(this).createErrorBulletin(error).show();

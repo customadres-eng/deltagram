@@ -75,7 +75,7 @@ func (r *Router) onPhoneRequestCall(ctx context.Context, req *tg.PhoneRequestCal
 		return nil, internalErr()
 	}
 	// 自呼 / bot / 不存在统一 USER_ID_INVALID。
-	if !found || callee.ID == 0 || callee.ID == callerID || callee.Bot {
+	if !found || callee.ID == 0 || callee.ID == callerID || callee.Bot || domain.IsSystemUserID(callee.ID) {
 		return nil, userIDInvalidErr()
 	}
 	if blocked, err := r.peerBlocksUser(ctx, callerID, callee.ID); err != nil {

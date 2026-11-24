@@ -18,6 +18,20 @@ func (a *API) cardRegistry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"cards": list})
 }
 
+func (a *API) cardHistory(w http.ResponseWriter, r *http.Request) {
+	userID := nativeUser(r)
+	if userID <= 0 {
+		writeErr(w, a.Log, domain.ErrUnauthorized)
+		return
+	}
+	entries, err := a.Cards.History(r.Context(), userID)
+	if err != nil {
+		writeErr(w, a.Log, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"entries": entries})
+}
+
 func (a *API) cardPrefs(w http.ResponseWriter, r *http.Request) {
 	userID := domainUser(r)
 	if userID <= 0 {
@@ -142,14 +156,18 @@ func (a *API) cardSetBanner(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, a.Log, domain.ErrUnauthorized)
 		return
 	}
-	mime := strings.TrimSpace(r.Header.Get("Content-Type"))
-	if !strings.HasPrefix(mime, "image/") {
+	if !strings.HasPrefix(strings.TrimSpace(r.Header.Get("Content-Type")), "image/") {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 3<<20)
 	data, err := io.ReadAll(r.Body)
 	if err != nil || len(data) < 128 {
+		writeErr(w, a.Log, domain.ErrInvalid)
+		return
+	}
+	data, mime, err := normalizeBannerCover(data)
+	if err != nil {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}

@@ -1208,7 +1208,7 @@ func (s *Server) handlePublishStarGiftCollectibles(w http.ResponseWriter, r *htt
 	}
 	req.GiftID = giftID
 	seen := make(map[string]struct{}, len(req.Models)+len(req.Patterns))
-	if len(req.Models)+len(req.Patterns) > 128 {
+	if len(req.Models)+len(req.Patterns) > domain.MaxStarGiftCollectibleAttributesPerKind*2 {
 		writeError(w, http.StatusBadRequest, "too many collectible animation files")
 		return
 	}

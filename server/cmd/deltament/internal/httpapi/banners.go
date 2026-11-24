@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"image/draw"
 	_ "image/gif"
-	_ "image/jpeg"
+	"image/jpeg"
 	_ "image/png"
 	"io"
 	"net/http"
@@ -66,6 +67,38 @@ func bannerURL(userID int64, token string) string {
 	return "/api/banners/" + strconv.FormatInt(userID, 10) + "?v=" + token
 }
 
+// normalizeBannerCover crops a banner to the 3:1 profile cover ratio and
+// re-encodes it as JPEG. The client draws a banner by fitting its width, so a
+// tall source would otherwise be zoomed into an extreme close-up.
+func normalizeBannerCover(body []byte) ([]byte, string, error) {
+	src, _, err := image.Decode(bytes.NewReader(body))
+	if err != nil {
+		return nil, "", err
+	}
+	bounds := src.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	cropW, cropH := width, width/3
+	if cropH < 1 {
+		cropH = 1
+	}
+	if cropH > height {
+		cropH = height
+		cropW = height * 3
+		if cropW > width {
+			cropW = width
+		}
+	}
+	cropX := bounds.Min.X + (width-cropW)/2
+	cropY := bounds.Min.Y + (height-cropH)/2
+	dst := image.NewRGBA(image.Rect(0, 0, cropW, cropH))
+	draw.Draw(dst, dst.Bounds(), src, image.Pt(cropX, cropY), draw.Src)
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 88}); err != nil {
+		return nil, "", err
+	}
+	return out.Bytes(), "image/jpeg", nil
+}
+
 func (a *API) uploadBanner(w http.ResponseWriter, r *http.Request) {
 	u, _ := userFrom(r.Context())
 	r.Body = http.MaxBytesReader(w, r.Body, maxBannerBytes)
@@ -78,29 +111,17 @@ func (a *API) uploadBanner(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}
-	mime := http.DetectContentType(body)
-	if mime != "image/jpeg" && mime != "image/png" {
+	cfg, _, cfgErr := image.DecodeConfig(bytes.NewReader(body))
+	if cfgErr != nil || cfg.Width < 320 || cfg.Height < 100 || cfg.Width > 6000 || cfg.Height > 6000 {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}
-	cfg, format, err := image.DecodeConfig(bytes.NewReader(body))
+	normalized, mime, err := normalizeBannerCover(body)
 	if err != nil {
 		writeErr(w, a.Log, domain.ErrInvalid)
 		return
 	}
-	switch format {
-	case "jpeg", "png":
-	default:
-		writeErr(w, a.Log, domain.ErrInvalid)
-		return
-	}
-	// 320x100 is the smallest crop that still reads as a cover; 6000px stops
-	// someone from parking a 100-megapixel image in the registry.
-	if cfg.Width < 320 || cfg.Height < 100 || cfg.Width > 6000 || cfg.Height > 6000 {
-		writeErr(w, a.Log, domain.ErrInvalid)
-		return
-	}
-	token, err := a.Banners.SetUserBanner(r.Context(), u.ServerUserID, mime, body)
+	token, err := a.Banners.SetUserBanner(r.Context(), u.ServerUserID, mime, normalized)
 	if err != nil {
 		writeErr(w, a.Log, err)
 		return

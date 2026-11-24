@@ -1,0 +1,1548 @@
+{
+  "pack_name": "Santa Hat",
+  "author": "DeltaGram",
+  "gifts": [
+    {
+      "id_slug": "santa-hat-5983471780763796287",
+      "title": "Santa Hat",
+      "stars": 50,
+      "convert_stars": 25,
+      "base_animation": "base.tgs",
+      "limited": true,
+      "availability_total": 300,
+      "limited_per_user": true,
+      "per_user_total": 30,
+      "upgrade": {
+        "upgrade_stars": 25,
+        "supply_total": 300,
+        "slug_prefix": "santa-hat",
+        "models": [
+          {
+            "name": "Creamy",
+            "animation": "model-5443005156503346429.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Fireball",
+            "animation": "model-5445302044883709049.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Jingle Volts",
+            "animation": "model-5447355739330864451.tgs",
+            "permille": 2
+          },
+          {
+            "name": "KFC",
+            "animation": "model-5444855316745313321.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Let It Go",
+            "animation": "model-5445366366313930930.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Magic Love",
+            "animation": "model-5443095844737805520.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Rave",
+            "animation": "model-5442939623892343401.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sweet Cane",
+            "animation": "model-5443002059831928948.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Telecap",
+            "animation": "model-5447591150783322738.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Yule Hat",
+            "animation": "model-5445286578706476156.tgs",
+            "permille": 2
+          },
+          {
+            "name": "All-Star",
+            "animation": "model-5442916899220380916.tgs",
+            "permille": 5
+          },
+          {
+            "name": "Bubbly",
+            "animation": "model-5442870599472932520.tgs",
+            "permille": 5
+          },
+          {
+            "name": "Festive",
+            "animation": "model-5447401669711126294.tgs",
+            "permille": 5
+          },
+          {
+            "name": "Jingle Bells",
+            "animation": "model-5442763431448959914.tgs",
+            "permille": 5
+          },
+          {
+            "name": "Lollipop",
+            "animation": "model-5445106112770630099.tgs",
+            "permille": 5
+          },
+          {
+            "name": "Rave-1",
+            "animation": "model-5447240595552623618.tgs",
+            "permille": 10
+          },
+          {
+            "name": "RGBling",
+            "animation": "model-5400053804211133981.tgs",
+            "permille": 10
+          },
+          {
+            "name": "Royal Gleam",
+            "animation": "model-5442647188159095603.tgs",
+            "permille": 10
+          },
+          {
+            "name": "Sweet Tooth",
+            "animation": "model-5442654352164543933.tgs",
+            "permille": 10
+          },
+          {
+            "name": "80s TV",
+            "animation": "model-5400080059346214642.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Black Drops",
+            "animation": "model-5398091266149867953.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Blueberry Mint",
+            "animation": "model-5400137148051512079.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Cold Limeade",
+            "animation": "model-5400136387842301134.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Cold Vapor",
+            "animation": "model-5397788226142362688.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Dreamy",
+            "animation": "model-5445143951432509143.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Inky White",
+            "animation": "model-5400230791223467699.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Minty Fresh",
+            "animation": "model-5400160985120006368.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Mistletoe",
+            "animation": "model-5399818676226515330.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Monosnow",
+            "animation": "model-5397633465585786585.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Mother Frost",
+            "animation": "model-5397677355856584963.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Night Cap",
+            "animation": "model-5447574980231454634.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Night Sky",
+            "animation": "model-5400322913976998900.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Nighttime",
+            "animation": "model-5399882924642296126.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Panda Puff",
+            "animation": "model-5397951452079480021.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Pinkie Cap",
+            "animation": "model-5397896240274892993.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Polar Glow",
+            "animation": "model-5400159503356287840.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Pure Chill",
+            "animation": "model-5399837397988956846.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Sleepy Claus",
+            "animation": "model-5447231077905095788.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Thin Ice",
+            "animation": "model-5400137934030528553.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Zesty",
+            "animation": "model-5397786297702049715.tgs",
+            "permille": 15
+          },
+          {
+            "name": "Aurora Borealis",
+            "animation": "model-5399973453962960203.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Below Zero",
+            "animation": "model-5400141760846391702.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Berry Frosty",
+            "animation": "model-5397640805684894952.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Candy Coral",
+            "animation": "model-5397795089500101690.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Cheery Vibe",
+            "animation": "model-5399908724510843374.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Cherry Ice",
+            "animation": "model-5397671987147463152.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Citrus Flakes",
+            "animation": "model-5399994894439703536.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Cold Autumn",
+            "animation": "model-5399961509658910669.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Cold Slushy",
+            "animation": "model-5399843720180819013.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Dandelion",
+            "animation": "model-5399844669368588300.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Evergreen",
+            "animation": "model-5399984663827601944.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Frosted Sun",
+            "animation": "model-5400152472494824407.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Golden Tide",
+            "animation": "model-5397572159222602216.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Hearth’s Fire",
+            "animation": "model-5400235021766255086.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Holiday Spirit",
+            "animation": "model-5397655159465598719.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Ice Cap",
+            "animation": "model-5400135142301789356.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Icicle",
+            "animation": "model-5400128747095482170.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Lagoon",
+            "animation": "model-5397620408885207621.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Lemon Sorbet",
+            "animation": "model-5398094431540763904.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Minted Rose",
+            "animation": "model-5397877956599112689.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Peachy",
+            "animation": "model-5397979081604094501.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Santa Claus",
+            "animation": "model-5399892390750216238.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Sunrise",
+            "animation": "model-5397996330192755992.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Sunset",
+            "animation": "model-5400070936835678083.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Sweet Night",
+            "animation": "model-5400178465636901580.tgs",
+            "permille": 20
+          },
+          {
+            "name": "The Grinch",
+            "animation": "model-5400106258646719994.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Warm Light",
+            "animation": "model-5397857628518900281.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Warm Sky",
+            "animation": "model-5398021112154054425.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Warm Winter",
+            "animation": "model-5397842669147806758.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Whipped Lime",
+            "animation": "model-5400181880135900317.tgs",
+            "permille": 20
+          }
+        ],
+        "patterns": [
+          {
+            "name": "Snowman",
+            "animation": "pattern-000.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Phoenix",
+            "animation": "pattern-001.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Car",
+            "animation": "pattern-002.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Diamonds",
+            "animation": "pattern-003.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Kite",
+            "animation": "pattern-004.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Bunny",
+            "animation": "pattern-005.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Cobra",
+            "animation": "pattern-006.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Book",
+            "animation": "pattern-007.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Light Bulb",
+            "animation": "pattern-008.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Cookie",
+            "animation": "pattern-009.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Tree of Life",
+            "animation": "pattern-010.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Moon Eagle",
+            "animation": "pattern-011.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Narcissus",
+            "animation": "pattern-012.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Gamepad",
+            "animation": "pattern-013.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Hot Drink",
+            "animation": "pattern-014.tgs",
+            "permille": 24
+          },
+          {
+            "name": "High Heels",
+            "animation": "pattern-015.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Baphomet",
+            "animation": "pattern-016.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Moon Cross",
+            "animation": "pattern-017.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Musical Note",
+            "animation": "pattern-018.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Turkey",
+            "animation": "pattern-019.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Champagne",
+            "animation": "pattern-020.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Scarab",
+            "animation": "pattern-021.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Ring",
+            "animation": "pattern-022.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Strawberry",
+            "animation": "pattern-023.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Coffee Bean",
+            "animation": "pattern-024.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Winter House",
+            "animation": "pattern-025.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Nordic Wolf",
+            "animation": "pattern-026.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Vortex",
+            "animation": "pattern-027.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Alarm",
+            "animation": "pattern-028.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Glasses",
+            "animation": "pattern-029.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Boat",
+            "animation": "pattern-030.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Dragonfly",
+            "animation": "pattern-031.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Ice Skates",
+            "animation": "pattern-032.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Wreath",
+            "animation": "pattern-033.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Trophy",
+            "animation": "pattern-034.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Skull",
+            "animation": "pattern-035.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Shooting Star",
+            "animation": "pattern-036.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Pegasus",
+            "animation": "pattern-037.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Croissant",
+            "animation": "pattern-038.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sword",
+            "animation": "pattern-039.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Rudolph",
+            "animation": "pattern-040.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Jingle Bell",
+            "animation": "pattern-041.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Fehu Rune",
+            "animation": "pattern-042.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Chest",
+            "animation": "pattern-043.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Lion Head",
+            "animation": "pattern-044.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Bastet",
+            "animation": "pattern-045.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Planet",
+            "animation": "pattern-046.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Jellyfish",
+            "animation": "pattern-047.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Rhino Warrior",
+            "animation": "pattern-048.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Flower Tulip",
+            "animation": "pattern-049.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Totem Bear",
+            "animation": "pattern-050.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Flower Cross",
+            "animation": "pattern-051.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sparks",
+            "animation": "pattern-052.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Ball",
+            "animation": "pattern-053.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Monstera",
+            "animation": "pattern-054.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sun Lion",
+            "animation": "pattern-055.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Santa Hat",
+            "animation": "pattern-056.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Candle",
+            "animation": "pattern-057.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Bottle",
+            "animation": "pattern-058.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Moon",
+            "animation": "pattern-059.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Ice Pop",
+            "animation": "pattern-060.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Sprout",
+            "animation": "pattern-061.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Unicorn Head",
+            "animation": "pattern-062.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Birthday Cake",
+            "animation": "pattern-063.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Gift Box",
+            "animation": "pattern-064.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Coin Purse",
+            "animation": "pattern-065.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Ornament",
+            "animation": "pattern-066.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Festive Wreath",
+            "animation": "pattern-067.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Star",
+            "animation": "pattern-068.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Rocket",
+            "animation": "pattern-069.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Like",
+            "animation": "pattern-070.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Candy",
+            "animation": "pattern-071.tgs",
+            "permille": 16
+          },
+          {
+            "name": "New Year’s Eve",
+            "animation": "pattern-072.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Magic Wand",
+            "animation": "pattern-073.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Grape",
+            "animation": "pattern-074.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Gingerbread",
+            "animation": "pattern-075.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Carambola",
+            "animation": "pattern-076.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Illuminati",
+            "animation": "pattern-077.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Grenade",
+            "animation": "pattern-078.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Brain",
+            "animation": "pattern-079.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Bowtie",
+            "animation": "pattern-080.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Oak Leaf",
+            "animation": "pattern-081.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sunflower",
+            "animation": "pattern-082.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Top Hat",
+            "animation": "pattern-083.tgs",
+            "permille": 2
+          },
+          {
+            "name": "PC Mouse",
+            "animation": "pattern-084.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Lightning",
+            "animation": "pattern-085.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Fireworks",
+            "animation": "pattern-086.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Cone",
+            "animation": "pattern-087.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Hamburger",
+            "animation": "pattern-088.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Ram of Amun",
+            "animation": "pattern-089.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Cocktail",
+            "animation": "pattern-090.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Royal Crown",
+            "animation": "pattern-091.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Christmas Tree",
+            "animation": "pattern-092.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Avocado",
+            "animation": "pattern-093.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Maple",
+            "animation": "pattern-094.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Snowflake",
+            "animation": "pattern-095.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Love Letter",
+            "animation": "pattern-096.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Gem",
+            "animation": "pattern-097.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Snow Angel",
+            "animation": "pattern-098.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Hermit Shell",
+            "animation": "pattern-099.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Blood Drop",
+            "animation": "pattern-100.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Flashlight",
+            "animation": "pattern-101.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Stocking",
+            "animation": "pattern-102.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Octopus",
+            "animation": "pattern-103.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Bee",
+            "animation": "pattern-104.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Toy Bucket",
+            "animation": "pattern-105.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sun Mountain",
+            "animation": "pattern-106.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Piggy Bank",
+            "animation": "pattern-107.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Scorpion",
+            "animation": "pattern-108.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Lily",
+            "animation": "pattern-109.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Fleur-de-lis",
+            "animation": "pattern-110.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Mittens",
+            "animation": "pattern-111.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Bell Pepper",
+            "animation": "pattern-112.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Lemon",
+            "animation": "pattern-113.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Piñata",
+            "animation": "pattern-114.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Tribal Shield",
+            "animation": "pattern-115.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Dessert",
+            "animation": "pattern-116.tgs",
+            "permille": 20
+          },
+          {
+            "name": "White Deer",
+            "animation": "pattern-117.tgs",
+            "permille": 20
+          },
+          {
+            "name": "Sharp Sword",
+            "animation": "pattern-118.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Cherry",
+            "animation": "pattern-119.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Heart",
+            "animation": "pattern-120.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Cicada",
+            "animation": "pattern-121.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Eikthyrnir",
+            "animation": "pattern-122.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Scissors",
+            "animation": "pattern-123.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Spades",
+            "animation": "pattern-124.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Mistletoe",
+            "animation": "pattern-125.tgs",
+            "permille": 24
+          },
+          {
+            "name": "Rain Drop",
+            "animation": "pattern-126.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Sea Horse",
+            "animation": "pattern-127.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Chili Pepper",
+            "animation": "pattern-128.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Cupcake",
+            "animation": "pattern-129.tgs",
+            "permille": 16
+          },
+          {
+            "name": "Burger",
+            "animation": "pattern-130.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Mask",
+            "animation": "pattern-131.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Wasp",
+            "animation": "pattern-132.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Yogi Shaman",
+            "animation": "pattern-133.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Genie Lamp",
+            "animation": "pattern-134.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Love Lock",
+            "animation": "pattern-135.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Tooth",
+            "animation": "pattern-136.tgs",
+            "permille": 2
+          },
+          {
+            "name": "Chili",
+            "animation": "pattern-137.tgs",
+            "permille": 2
+          }
+        ],
+        "backdrops": [
+          {
+            "name": "Burgundy",
+            "center": "#a35e66",
+            "edge": "#6d414a",
+            "pattern": "#340307",
+            "text": "#e7bcc0",
+            "permille": 10
+          },
+          {
+            "name": "Cappuccino",
+            "center": "#b1907e",
+            "edge": "#7c6356",
+            "pattern": "#4a3226",
+            "text": "#ebd4c8",
+            "permille": 10
+          },
+          {
+            "name": "Cyberpunk",
+            "center": "#858ff3",
+            "edge": "#865fd3",
+            "pattern": "#4318a6",
+            "text": "#e0d9ff",
+            "permille": 10
+          },
+          {
+            "name": "Dark Lilac",
+            "center": "#b17da5",
+            "edge": "#8c577a",
+            "pattern": "#652852",
+            "text": "#f0c4e2",
+            "permille": 10
+          },
+          {
+            "name": "Desert Sand",
+            "center": "#b39f82",
+            "edge": "#7e735b",
+            "pattern": "#504429",
+            "text": "#f2e5cd",
+            "permille": 10
+          },
+          {
+            "name": "Emerald",
+            "center": "#78c585",
+            "edge": "#42a171",
+            "pattern": "#006532",
+            "text": "#b9f9d9",
+            "permille": 10
+          },
+          {
+            "name": "Mystic Pearl",
+            "center": "#d08b6d",
+            "edge": "#b05770",
+            "pattern": "#9b0526",
+            "text": "#fedde0",
+            "permille": 10
+          },
+          {
+            "name": "Neon Blue",
+            "center": "#7596f9",
+            "edge": "#6862e4",
+            "pattern": "#2828bc",
+            "text": "#cfddff",
+            "permille": 10
+          },
+          {
+            "name": "Raspberry",
+            "center": "#e07b85",
+            "edge": "#b65980",
+            "pattern": "#890638",
+            "text": "#ffd6e6",
+            "permille": 10
+          },
+          {
+            "name": "Sapphire",
+            "center": "#58a3c8",
+            "edge": "#5379c2",
+            "pattern": "#0d45b6",
+            "text": "#c1deff",
+            "permille": 10
+          },
+          {
+            "name": "Amber",
+            "center": "#dab345",
+            "edge": "#b1802a",
+            "pattern": "#7a3100",
+            "text": "#ffedc7",
+            "permille": 15
+          },
+          {
+            "name": "Battleship Grey",
+            "center": "#8c8c85",
+            "edge": "#6c6c66",
+            "pattern": "#2b2a20",
+            "text": "#cfcec4",
+            "permille": 15
+          },
+          {
+            "name": "Chocolate",
+            "center": "#a46e58",
+            "edge": "#74443b",
+            "pattern": "#3e0a02",
+            "text": "#e4b6ac",
+            "permille": 15
+          },
+          {
+            "name": "Electric Indigo",
+            "center": "#a980f3",
+            "edge": "#5b62d8",
+            "pattern": "#3722ab",
+            "text": "#d8d8ff",
+            "permille": 15
+          },
+          {
+            "name": "Electric Purple",
+            "center": "#ca70c6",
+            "edge": "#9662d4",
+            "pattern": "#620fb4",
+            "text": "#ebceff",
+            "permille": 15
+          },
+          {
+            "name": "English Violet",
+            "center": "#b186bb",
+            "edge": "#875a91",
+            "pattern": "#54225f",
+            "text": "#e6c7ed",
+            "permille": 15
+          },
+          {
+            "name": "Jade Green",
+            "center": "#55c49c",
+            "edge": "#3b9977",
+            "pattern": "#044931",
+            "text": "#befee7",
+            "permille": 15
+          },
+          {
+            "name": "Khaki Green",
+            "center": "#adb070",
+            "edge": "#6b7d54",
+            "pattern": "#39501b",
+            "text": "#d3e6bb",
+            "permille": 15
+          },
+          {
+            "name": "Mint Green",
+            "center": "#7ecb82",
+            "edge": "#459e5a",
+            "pattern": "#026b22",
+            "text": "#bdffcc",
+            "permille": 15
+          },
+          {
+            "name": "Orange",
+            "center": "#d19a3a",
+            "edge": "#c06f47",
+            "pattern": "#9d3907",
+            "text": "#ffe1c3",
+            "permille": 15
+          },
+          {
+            "name": "Persimmon",
+            "center": "#e7a75a",
+            "edge": "#c5675f",
+            "pattern": "#ad0e00",
+            "text": "#ffe4d7",
+            "permille": 15
+          },
+          {
+            "name": "Pine Green",
+            "center": "#6ba97c",
+            "edge": "#3e7970",
+            "pattern": "#0b4833",
+            "text": "#d8f5e5",
+            "permille": 15
+          },
+          {
+            "name": "Pistachio",
+            "center": "#97b07c",
+            "edge": "#5c814c",
+            "pattern": "#28471b",
+            "text": "#d9f2c9",
+            "permille": 15
+          },
+          {
+            "name": "Purple",
+            "center": "#ae6cae",
+            "edge": "#844784",
+            "pattern": "#470c47",
+            "text": "#f3cbf3",
+            "permille": 15
+          },
+          {
+            "name": "Rosewood",
+            "center": "#b77a77",
+            "edge": "#814c52",
+            "pattern": "#551c22",
+            "text": "#edcacd",
+            "permille": 15
+          },
+          {
+            "name": "Satin Gold",
+            "center": "#bf9b47",
+            "edge": "#8d7739",
+            "pattern": "#5d3b00",
+            "text": "#fee4a9",
+            "permille": 15
+          },
+          {
+            "name": "Silver Blue",
+            "center": "#80a4b8",
+            "edge": "#607c91",
+            "pattern": "#15374b",
+            "text": "#c9e4f4",
+            "permille": 15
+          },
+          {
+            "name": "Steel Grey",
+            "center": "#97a2ac",
+            "edge": "#63727c",
+            "pattern": "#334552",
+            "text": "#dfe4e8",
+            "permille": 15
+          },
+          {
+            "name": "Strawberry",
+            "center": "#dd8e6f",
+            "edge": "#b75a60",
+            "pattern": "#a90c0c",
+            "text": "#ffd3d3",
+            "permille": 15
+          },
+          {
+            "name": "Turquoise",
+            "center": "#5ec0b8",
+            "edge": "#3d928e",
+            "pattern": "#11534c",
+            "text": "#bdf8f2",
+            "permille": 15
+          },
+          {
+            "name": "Aquamarine",
+            "center": "#60b195",
+            "edge": "#46abb4",
+            "pattern": "#035f67",
+            "text": "#c7fdfe",
+            "permille": 20
+          },
+          {
+            "name": "Azure Blue",
+            "center": "#5db1cb",
+            "edge": "#448bab",
+            "pattern": "#025074",
+            "text": "#b5ecff",
+            "permille": 20
+          },
+          {
+            "name": "Black",
+            "center": "#363738",
+            "edge": "#0e0f0f",
+            "pattern": "#6c6868",
+            "text": "#8c8f91",
+            "permille": 20
+          },
+          {
+            "name": "Caramel",
+            "center": "#d09932",
+            "edge": "#b77431",
+            "pattern": "#7d3600",
+            "text": "#ffd9b3",
+            "permille": 20
+          },
+          {
+            "name": "Carrot Juice",
+            "center": "#db9867",
+            "edge": "#c76f4f",
+            "pattern": "#8e2100",
+            "text": "#ffd7ca",
+            "permille": 20
+          },
+          {
+            "name": "Chestnut",
+            "center": "#be6f54",
+            "edge": "#994838",
+            "pattern": "#601508",
+            "text": "#fec6b9",
+            "permille": 20
+          },
+          {
+            "name": "Cobalt Blue",
+            "center": "#6088cf",
+            "edge": "#5162b8",
+            "pattern": "#13247c",
+            "text": "#c2d3f5",
+            "permille": 20
+          },
+          {
+            "name": "Copper",
+            "center": "#d08656",
+            "edge": "#9d6531",
+            "pattern": "#602901",
+            "text": "#f4d8be",
+            "permille": 20
+          },
+          {
+            "name": "Coral Red",
+            "center": "#da896b",
+            "edge": "#c4654f",
+            "pattern": "#891200",
+            "text": "#ffd9d2",
+            "permille": 20
+          },
+          {
+            "name": "Fandango",
+            "center": "#e28ab6",
+            "edge": "#a4588b",
+            "pattern": "#8e054e",
+            "text": "#ffc7eb",
+            "permille": 20
+          },
+          {
+            "name": "French Blue",
+            "center": "#5c9bc4",
+            "edge": "#37739a",
+            "pattern": "#073b5c",
+            "text": "#c1e3f9",
+            "permille": 20
+          },
+          {
+            "name": "Grape",
+            "center": "#9d74c1",
+            "edge": "#794da0",
+            "pattern": "#3e0a6b",
+            "text": "#e0bdfe",
+            "permille": 20
+          },
+          {
+            "name": "Hunter Green",
+            "center": "#8fae78",
+            "edge": "#4b825b",
+            "pattern": "#1c491f",
+            "text": "#d8f5de",
+            "permille": 20
+          },
+          {
+            "name": "Indigo Dye",
+            "center": "#537991",
+            "edge": "#416479",
+            "pattern": "#031b29",
+            "text": "#c2dcee",
+            "permille": 20
+          },
+          {
+            "name": "Ivory White",
+            "center": "#bab6b1",
+            "edge": "#a19d97",
+            "pattern": "#665f52",
+            "text": "#f5f4f2",
+            "permille": 20
+          },
+          {
+            "name": "Lavender",
+            "center": "#b789e4",
+            "edge": "#8a5abc",
+            "pattern": "#5b10ab",
+            "text": "#e8d1ff",
+            "permille": 20
+          },
+          {
+            "name": "Lemongrass",
+            "center": "#aeb85a",
+            "edge": "#559345",
+            "pattern": "#466a07",
+            "text": "#d8f2c2",
+            "permille": 20
+          },
+          {
+            "name": "Light Olive",
+            "center": "#c2af64",
+            "edge": "#887e45",
+            "pattern": "#594c04",
+            "text": "#f5ebbc",
+            "permille": 20
+          },
+          {
+            "name": "Malachite",
+            "center": "#95b457",
+            "edge": "#3d9755",
+            "pattern": "#046b06",
+            "text": "#c2efbe",
+            "permille": 20
+          },
+          {
+            "name": "Midnight Blue",
+            "center": "#5c6985",
+            "edge": "#354057",
+            "pattern": "#030a18",
+            "text": "#bfcce0",
+            "permille": 20
+          },
+          {
+            "name": "Moonstone",
+            "center": "#7eb1b4",
+            "edge": "#588390",
+            "pattern": "#164552",
+            "text": "#daf5fd",
+            "permille": 20
+          },
+          {
+            "name": "Navy Blue",
+            "center": "#6c9edd",
+            "edge": "#5c6ec9",
+            "pattern": "#1239a2",
+            "text": "#d3e1ff",
+            "permille": 20
+          },
+          {
+            "name": "Onyx Black",
+            "center": "#4d5254",
+            "edge": "#313638",
+            "pattern": "#000000",
+            "text": "#a9abad",
+            "permille": 20
+          },
+          {
+            "name": "Pacific Cyan",
+            "center": "#5abea6",
+            "edge": "#3d95ba",
+            "pattern": "#02648d",
+            "text": "#b6efff",
+            "permille": 20
+          },
+          {
+            "name": "Pacific Green",
+            "center": "#6fc793",
+            "edge": "#3b9c84",
+            "pattern": "#006149",
+            "text": "#c6fff0",
+            "permille": 20
+          },
+          {
+            "name": "Platinum",
+            "center": "#b2aea7",
+            "edge": "#88847e",
+            "pattern": "#3d382d",
+            "text": "#e9e7e2",
+            "permille": 20
+          },
+          {
+            "name": "Pure Gold",
+            "center": "#ccab41",
+            "edge": "#987b32",
+            "pattern": "#703c00",
+            "text": "#ffe5ab",
+            "permille": 20
+          },
+          {
+            "name": "Roman Silver",
+            "center": "#a3a8b5",
+            "edge": "#7c808a",
+            "pattern": "#3f4550",
+            "text": "#dadfe2",
+            "permille": 20
+          },
+          {
+            "name": "Shamrock Green",
+            "center": "#8ab163",
+            "edge": "#559345",
+            "pattern": "#126b00",
+            "text": "#d5fbc8",
+            "permille": 20
+          },
+          {
+            "name": "Sky Blue",
+            "center": "#58b4c8",
+            "edge": "#538bc2",
+            "pattern": "#07609b",
+            "text": "#cde8fd",
+            "permille": 20
+          }
+        ]
+      }
+    }
+  ]
+}

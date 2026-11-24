@@ -53,6 +53,14 @@ type StarGift struct {
 	AuctionRoundDuration int
 	UpgradeVariants      int
 	Background           *StarGiftBackground
+
+	// PurchaseWindow* describe an optional recurring daily sale window. A
+	// limited drop can require purchases to happen only at a fixed local time
+	// (for example 19:40 Europe/Kyiv) instead of accepting them all day.
+	PurchaseWindowEnabled         bool
+	PurchaseWindowStartMinute     int
+	PurchaseWindowDurationMinutes int
+	PurchaseWindowTimezone        string
 }
 
 // StarGiftBackground is the release-level palette used by auction cards and
@@ -61,6 +69,56 @@ type StarGiftBackground struct {
 	CenterColor int
 	EdgeColor   int
 	TextColor   int
+}
+
+// PurchaseWindowOpen reports whether now falls inside the gift's recurring
+// daily purchase window. Gifts without a window are always open. An invalid
+// timezone fails closed: a misconfigured drop must not silently become
+// purchasable around the clock.
+func (g StarGift) PurchaseWindowOpen(now time.Time) bool {
+	if !g.PurchaseWindowEnabled {
+		return true
+	}
+	if g.PurchaseWindowDurationMinutes <= 0 || g.PurchaseWindowDurationMinutes > 1440 ||
+		g.PurchaseWindowStartMinute < 0 || g.PurchaseWindowStartMinute > 1439 {
+		return false
+	}
+	location, err := time.LoadLocation(g.PurchaseWindowTimezone)
+	if err != nil {
+		return false
+	}
+	if g.PurchaseWindowDurationMinutes >= 1440 {
+		return true
+	}
+	local := now.In(location)
+	minute := local.Hour()*60 + local.Minute()
+	offset := minute - g.PurchaseWindowStartMinute
+	if offset < 0 {
+		offset += 1440
+	}
+	return offset < g.PurchaseWindowDurationMinutes
+}
+
+// NextPurchaseWindowStart returns the next opening of the recurring window at
+// or after now. It is used for the client projection so a gift that is closed
+// right now still shows the upcoming 19:40 release instead of looking broken.
+func (g StarGift) NextPurchaseWindowStart(now time.Time) (time.Time, bool) {
+	if !g.PurchaseWindowEnabled || g.PurchaseWindowStartMinute < 0 || g.PurchaseWindowStartMinute > 1439 {
+		return time.Time{}, false
+	}
+	location, err := time.LoadLocation(g.PurchaseWindowTimezone)
+	if err != nil {
+		return time.Time{}, false
+	}
+	local := now.In(location)
+	hour, minute := g.PurchaseWindowStartMinute/60, g.PurchaseWindowStartMinute%60
+	for day := 0; day < 2; day++ {
+		candidate := time.Date(local.Year(), local.Month(), local.Day()+day, hour, minute, 0, 0, location)
+		if !candidate.Before(now) {
+			return candidate, true
+		}
+	}
+	return time.Time{}, false
 }
 
 // SavedStarGift 是一条已收到的礼物实例（peer_star_gifts 一行）。
@@ -509,7 +567,6 @@ type StarGiftUpgradeAllResult struct {
 	StopReason   string
 	LastError    string
 }
-
 
 // StarGiftUpgradeReceipt is the immutable command envelope needed to replay a
 // committed upgrade after the saved gift has entered its unique terminal state.
@@ -969,6 +1026,11 @@ type StarGiftCatalogWrite struct {
 	AuctionRoundDuration int
 	UpgradeVariants      int
 	Background           *StarGiftBackground
+	// PurchaseWindow* enable a recurring daily sale window (see StarGift).
+	PurchaseWindowEnabled         bool
+	PurchaseWindowStartMinute     int
+	PurchaseWindowDurationMinutes int
+	PurchaseWindowTimezone        string
 }
 
 // ValidateLifecycleAuthoring validates the optional auction and scheduled-release
@@ -980,8 +1042,27 @@ type StarGiftCatalogWrite struct {
 // the rules here may be stricter than the official model.
 func (w StarGiftCatalogWrite) ValidateLifecycleAuthoring(now int) error {
 	if w.GiftsPerRound < 0 || w.AvailabilityTotal < 0 || w.AuctionStartDate < 0 ||
-		w.LockedUntilDate < 0 || w.AuctionRoundDuration < 0 {
+		w.LockedUntilDate < 0 || w.AuctionRoundDuration < 0 ||
+		w.PurchaseWindowStartMinute < 0 || w.PurchaseWindowDurationMinutes < 0 {
 		return fmt.Errorf("%w: negative field", ErrStarGiftLifecycleInvalid)
+	}
+	if w.PurchaseWindowEnabled {
+		if w.PurchaseWindowStartMinute > 1439 {
+			return fmt.Errorf("%w: purchase window start minute must be within one day", ErrStarGiftLifecycleInvalid)
+		}
+		if w.PurchaseWindowDurationMinutes == 0 || w.PurchaseWindowDurationMinutes > 1440 {
+			return fmt.Errorf("%w: purchase window duration must be 1..1440 minutes", ErrStarGiftLifecycleInvalid)
+		}
+		timezone := strings.TrimSpace(w.PurchaseWindowTimezone)
+		if timezone == "" {
+			return fmt.Errorf("%w: purchase window timezone is required", ErrStarGiftLifecycleInvalid)
+		}
+		if _, err := time.LoadLocation(timezone); err != nil {
+			return fmt.Errorf("%w: purchase window timezone is invalid", ErrStarGiftLifecycleInvalid)
+		}
+	} else if w.PurchaseWindowStartMinute != 0 || w.PurchaseWindowDurationMinutes != 0 ||
+		strings.TrimSpace(w.PurchaseWindowTimezone) != "" {
+		return fmt.Errorf("%w: purchase window parameters set without enabling the window", ErrStarGiftLifecycleInvalid)
 	}
 	if w.Auction {
 		if strings.TrimSpace(w.AuctionSlug) == "" {
@@ -1001,6 +1082,9 @@ func (w StarGiftCatalogWrite) ValidateLifecycleAuthoring(now int) error {
 		}
 		if w.LockedUntilDate != 0 {
 			return fmt.Errorf("%w: auctions do not use a scheduled-release time", ErrStarGiftLifecycleInvalid)
+		}
+		if w.PurchaseWindowEnabled {
+			return fmt.Errorf("%w: auctions do not use a recurring purchase window", ErrStarGiftLifecycleInvalid)
 		}
 		// The gift price is the auction's opening bid (ensureStarGiftAuction seeds
 		// min_bid_amount from it), so it is bound by the same ceiling as a bid.

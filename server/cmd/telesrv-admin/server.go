@@ -2530,7 +2530,7 @@ func (s *server) handlePublishStarGiftCollectiblesAPI(w http.ResponseWriter, r *
 		writeAPIError(w, http.StatusBadRequest, "invalid metadata: "+err.Error())
 		return
 	}
-	if len(body.Models)+len(body.Patterns) > 128 {
+	if len(body.Models)+len(body.Patterns) > domain.MaxStarGiftCollectibleAttributesPerKind*2 {
 		writeAPIError(w, http.StatusBadRequest, "too many collectible animation files")
 		return
 	}

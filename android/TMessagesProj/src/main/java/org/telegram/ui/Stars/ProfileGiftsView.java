@@ -2016,7 +2016,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         final float acy = realH > 0f ? realY + realH / 2f : barBottom + dp(54);
         final float avatarRadius = realW > 0f && realH > 0f
                 ? Math.min(realW, realH) / 2f
-                : dp(ProfileActivity.isProfileV2Enabled() ? 54 : 48);
+                : dp(48);
         final float viewBottom = Math.max(getHeight(), barBottom + dp(240));
 
         final float visibility = (1f - 0.92f * expandProgress) * (1f - actionBarProgress);
@@ -2067,7 +2067,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
         if (visibility <= 0.001f) return;
 
-        final float avatarSize = dp(ProfileActivity.isProfileV2Enabled() ? 108 : 96);
+        final float avatarSize = dp(96);
         // Slots are stored as angle + distance around the avatar, so a moving
         // avatar (parallax, pull-down) just drags the whole constellation with
         // it instead of re-randomising the layout mid-gesture.

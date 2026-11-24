@@ -48,6 +48,13 @@ func (c *Cards) Registry(ctx context.Context) ([]domain.CardPublic, error) {
 	return c.db.CardRegistry(ctx)
 }
 
+func (c *Cards) History(ctx context.Context, userID int64) ([]domain.CardHistoryEntry, error) {
+	if userID <= 0 {
+		return nil, domain.ErrUnauthorized
+	}
+	return c.db.CardHistory(ctx, userID)
+}
+
 func (c *Cards) Prefs(ctx context.Context, userID int64) (domain.CardPrefs, error) {
 	p, err := c.db.CardPrefs(ctx, userID)
 	if errors.Is(err, domain.ErrNotFound) {
@@ -56,9 +63,7 @@ func (c *Cards) Prefs(ctx context.Context, userID int64) (domain.CardPrefs, erro
 	return p, err
 }
 
-// SetPrefs validates the colour and, when an NFT is chosen, that the row still
-// belongs to the caller. The slug/num are copied from the asset so a client
-// cannot point another user's card at arbitrary artwork.
+// SetPrefs validates the colour. Gift NFTs belong in the profile, not as card stickers.
 func (c *Cards) SetPrefs(ctx context.Context, userID int64, colorID int, nftRowID int64, nftX, nftY, nftScale, nftRotation float64) (domain.CardPrefs, error) {
 	if userID <= 0 {
 		return domain.CardPrefs{}, fmt.Errorf("%w: user is required", domain.ErrInvalid)
@@ -66,19 +71,13 @@ func (c *Cards) SetPrefs(ctx context.Context, userID int64, colorID int, nftRowI
 	if colorID < CardColorStock || colorID > CardColorBlack {
 		return domain.CardPrefs{}, fmt.Errorf("%w: unknown card colour", domain.ErrInvalid)
 	}
+	if nftRowID != 0 {
+		return domain.CardPrefs{}, fmt.Errorf("%w: NFT card stickers are disabled", domain.ErrInvalid)
+	}
 	if nftX < 0 || nftX > 1 || nftY < 0 || nftY > 1 || nftScale < 0.05 || nftScale > 1 || nftRotation < -180 || nftRotation > 180 {
 		return domain.CardPrefs{}, fmt.Errorf("%w: invalid card sticker transform", domain.ErrInvalid)
 	}
 	p := domain.CardPrefs{UserID: userID, ColorID: colorID, NFTX: nftX, NFTY: nftY, NFTScale: nftScale, NFTRotation: nftRotation}
-	if nftRowID > 0 {
-		gift, err := c.db.OwnedGift(ctx, userID, nftRowID)
-		if err != nil {
-			return domain.CardPrefs{}, err
-		}
-		p.NFTRowID = gift.RowID
-		p.NFTSlug = gift.Slug
-		p.NFTNum = gift.Num
-	}
 	if err := c.db.SetCardPrefs(ctx, p); err != nil {
 		return domain.CardPrefs{}, err
 	}
@@ -147,11 +146,19 @@ func (c *Cards) Send(ctx context.Context, fromUserID int64, toUsername, kind str
 		if amount < 10_000_000 {
 			return domain.CardPublic{}, fmt.Errorf("%w: minimum is 0.01 TON", domain.ErrInvalid)
 		}
+		sender, err := c.cardOf(ctx, fromUserID)
+		if err != nil {
+			return domain.CardPublic{}, err
+		}
+		senderName := sender.Username
+		if senderName == "" {
+			senderName = fmt.Sprint(fromUserID)
+		}
 		err = c.db.InTx(ctx, func(tx store.Tx) error {
 			if err := tx.DebitTON(ctx, fromUserID, amount, "card_send", "Перевод TON пользователю @"+strings.TrimPrefix(toUsername, "@")); err != nil {
 				return err
 			}
-			return tx.CreditTON(ctx, toUserID, amount, "card_receive", "Перевод TON от пользователя")
+			return tx.CreditTON(ctx, toUserID, amount, "card_receive", "Перевод TON от @"+senderName)
 		})
 	case "stars":
 		if amount < 1 {

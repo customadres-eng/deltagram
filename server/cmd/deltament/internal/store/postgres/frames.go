@@ -15,7 +15,8 @@ func (db *DB) AvatarFrames(ctx context.Context) (map[int64]string, error) {
 	rows, err := db.pool.Query(ctx, `
 SELECT id, avatar_frame
 FROM users
-WHERE avatar_frame <> '' AND deleted_at IS NULL`)
+WHERE avatar_frame IN ('blue', 'fire', 'green', 'holographic_glass_ring', 'liquid_chrome_ring')
+  AND deleted_at IS NULL`)
 	if err != nil {
 		return nil, fmt.Errorf("list avatar frames: %w", err)
 	}
@@ -36,4 +37,30 @@ WHERE avatar_frame <> '' AND deleted_at IS NULL`)
 		return nil, fmt.Errorf("iterate avatar frames: %w", err)
 	}
 	return out, nil
+}
+
+// VerificationIcons is a public projection of the first badge on each user
+// profile. The native TL flag remains authoritative; this registry lets the
+// DeltaGram profile recover when an older cached peer/full object lacks it.
+func (db *DB) VerificationIcons(ctx context.Context) (map[int64]int64, error) {
+	rows, err := db.pool.Query(ctx, `
+SELECT DISTINCT ON (v.peer_id) v.peer_id, v.icon_document_id
+FROM custom_verifications v
+JOIN users u ON u.id = v.peer_id AND u.deleted_at IS NULL
+JOIN verification_icons i ON i.document_id = v.icon_document_id AND i.active
+WHERE v.peer_type = 'user'
+ORDER BY v.peer_id, v.updated_at DESC, v.id DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list verification icons: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[int64]int64)
+	for rows.Next() {
+		var userID, iconID int64
+		if err := rows.Scan(&userID, &iconID); err != nil {
+			return nil, fmt.Errorf("scan verification icon: %w", err)
+		}
+		out[userID] = iconID
+	}
+	return out, rows.Err()
 }

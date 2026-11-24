@@ -66,6 +66,7 @@ type Wallet interface {
 
 type Cards interface {
 	Registry(ctx context.Context) ([]domain.CardPublic, error)
+	History(ctx context.Context, userID int64) ([]domain.CardHistoryEntry, error)
 	Prefs(ctx context.Context, userID int64) (domain.CardPrefs, error)
 	SetPrefs(ctx context.Context, userID int64, colorID int, nftRowID int64, nftX, nftY, nftScale, nftRotation float64) (domain.CardPrefs, error)
 	Nfts(ctx context.Context, userID int64) ([]domain.GiftAsset, error)
@@ -114,6 +115,7 @@ type Deps struct {
 // cosmetic user ids plus frame ids.
 type Frames interface {
 	AvatarFrames(ctx context.Context) (map[int64]string, error)
+	VerificationIcons(ctx context.Context) (map[int64]int64, error)
 }
 
 // Banners serves profile banners: the registry is public, uploads are not.
@@ -165,6 +167,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/gift-anim/model/{id}", a.getGiftModelAnimation)
 	mux.HandleFunc("GET /api/gift-anim/pattern/{id}", a.getGiftPatternAnimation)
 	mux.HandleFunc("GET /api/cards/registry", a.cardRegistry)
+	mux.HandleFunc("GET /api/cards/history", a.nativeAuth(a.cardHistory))
 	mux.HandleFunc("GET /api/cards/prefs", a.nativeAuth(a.cardPrefs))
 	mux.HandleFunc("POST /api/cards/prefs", a.nativeAuth(a.cardSetPrefs))
 	mux.HandleFunc("GET /api/cards/nfts", a.nativeAuth(a.cardNfts))
@@ -178,6 +181,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("POST /api/domains/list", a.nativeAuth(a.domainList))
 	mux.HandleFunc("POST /api/domains/unlist", a.nativeAuth(a.domainUnlist))
 	mux.HandleFunc("GET /api/frames/registry", a.getFramesRegistry)
+	mux.HandleFunc("GET /api/verifications/registry", a.getVerificationRegistry)
 	mux.HandleFunc("GET /api/banners/registry", a.getBannerRegistry)
 	mux.HandleFunc("GET /api/banners/{id}", a.getBanner)
 

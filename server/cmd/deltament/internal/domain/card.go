@@ -34,3 +34,16 @@ type CardPublic struct {
 	NFTScale   float64 `json:"nft_scale"`
 	NFTRotation float64 `json:"nft_rotation"`
 }
+
+// CardHistoryEntry is a real ledger movement on either the TON or Stars card.
+type CardHistoryEntry struct {
+	ID           int64  `json:"id"`
+	Kind         string `json:"kind"`
+	Amount       int64  `json:"amount"`
+	Reason       string `json:"reason"`
+	Title        string `json:"title"`
+	Created      int64  `json:"created"`
+	PeerID       int64  `json:"peer_id"`
+	PeerName     string `json:"peer_name"`
+	PeerUsername string `json:"peer_username"`
+}

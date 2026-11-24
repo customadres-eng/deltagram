@@ -74,6 +74,43 @@ public final class DeltagramCards {
         public String url = "";
     }
 
+    public static class CardTransaction {
+        public long id;
+        public String kind = "";
+        public long amount;
+        public String reason = "";
+        public String title = "";
+        public long created;
+        public long peerId;
+        public String peerName = "";
+        public String peerUsername = "";
+    }
+
+    public static void history(int account, Callback<List<CardTransaction>> callback) {
+        get(account, "/api/cards/history", json -> {
+            List<CardTransaction> entries = new ArrayList<>();
+            JSONArray rows = json.optJSONArray("entries");
+            if (rows != null) {
+                for (int i = 0; i < rows.length(); i++) {
+                    JSONObject row = rows.optJSONObject(i);
+                    if (row == null) continue;
+                    CardTransaction entry = new CardTransaction();
+                    entry.id = row.optLong("id");
+                    entry.kind = row.optString("kind");
+                    entry.amount = row.optLong("amount");
+                    entry.reason = row.optString("reason");
+                    entry.title = row.optString("title");
+                    entry.created = row.optLong("created");
+                    entry.peerId = row.optLong("peer_id");
+                    entry.peerName = row.optString("peer_name");
+                    entry.peerUsername = row.optString("peer_username");
+                    entries.add(entry);
+                }
+            }
+            return entries;
+        }, callback);
+    }
+
     public static class Prefs {
         public int colorId = -1;
         public long nftRowId;

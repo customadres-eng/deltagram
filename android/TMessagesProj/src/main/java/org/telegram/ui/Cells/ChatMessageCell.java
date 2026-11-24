@@ -7339,6 +7339,16 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         String comment = LocaleController.formatShortNumber(commentCount, null);
                         commentWidth = totalCommentWidth = (int) Math.ceil(Theme.chat_stickerCommentCountPaint.measureText(comment));
                         commentLayout = new StaticLayout(comment, Theme.chat_stickerCommentCountPaint, commentWidth + dp(2), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+                    } else if (!isRepliesChat) {
+                        // The side comment button used to become an unlabeled
+                        // square when a channel post had no replies yet.
+                        String label = "Ком.";
+                        CharSequence shortLabel = TextUtils.ellipsize(label,
+                                Theme.chat_stickerCommentCountPaint, dp(30), TextUtils.TruncateAt.END);
+                        commentWidth = totalCommentWidth = (int) Math.ceil(
+                                Theme.chat_stickerCommentCountPaint.measureText(shortLabel.toString()));
+                        commentLayout = new StaticLayout(shortLabel, Theme.chat_stickerCommentCountPaint,
+                                dp(32), Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false);
                     } else {
                         commentLayout = null;
                     }
@@ -21013,13 +21023,21 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
 
         Drawable commentStickerDrawable = Theme.getThemeDrawable(Theme.key_drawable_commentSticker);
-        setDrawableBounds(commentStickerDrawable, sideStartX + dp(4), sideStartY + dp(4));
-        if (alpha != 1f) {
+        if (commentStickerDrawable != null) {
+            setDrawableBounds(commentStickerDrawable, sideStartX + dp(4), sideStartY + dp(4));
             commentStickerDrawable.setAlpha((int) (255 * alpha));
             commentStickerDrawable.draw(canvas);
             commentStickerDrawable.setAlpha(255);
-        } else {
-            commentStickerDrawable.draw(canvas);
+        }
+        // Some channel posts use the side button without a replies layout.
+        // Keep a visible label even when the themed sticker icon is absent.
+        if (commentLayout == null) {
+            Paint labelPaint = Theme.chat_stickerCommentCountPaint;
+            labelPaint.setColor(0xffffffff);
+            labelPaint.setAlpha((int) (255 * alpha));
+            labelPaint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText("Ком.", sideStartX + dp(16), sideStartY + dp(27), labelPaint);
+            labelPaint.setTextAlign(Paint.Align.LEFT);
         }
 
         if (commentLayout != null) {

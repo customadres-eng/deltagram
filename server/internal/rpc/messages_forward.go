@@ -147,9 +147,6 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 		if req.AllowPaidFloodskip {
 			return nil, paymentUnsupportedErr()
 		}
-		if err := r.ensurePrivateContactAllowed(ctx, userID, toPeer.ID, req.AllowPaidStars, len(absentIndexes)); err != nil {
-			return nil, err
-		}
 	}
 	absentIDs := make([]int, len(absentIndexes))
 	absentRandomIDs := make([]int64, len(absentIndexes))
@@ -280,6 +277,10 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 		if err != nil {
 			return nil, err
 		}
+		paidPrice, err := r.ensurePrivateContactAllowed(ctx, userID, toPeer.ID, req.AllowPaidStars, len(absentIndexes))
+		if err != nil {
+			return nil, err
+		}
 		sessionID, _ := SessionIDFrom(ctx)
 		authKeyID := rawAuthKeyIDForOrigin(ctx)
 		res := domain.ForwardPrivateMessagesResult{OwnerUserID: userID}
@@ -297,6 +298,12 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 			forward := source.forward
 			if req.DropAuthor {
 				forward = nil
+			}
+			paid := false
+			if paidPrice > 0 {
+				if paid, err = r.debitPaidMessage(ctx, userID, toPeer.ID, paidPrice); err != nil {
+					return nil, err
+				}
 			}
 			if forward != nil && toPeer.ID == userID {
 				saved := *forward
@@ -323,7 +330,13 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 				IdempotencyPreflighted: replays[i].checked,
 			})
 			if err != nil {
+				if paid {
+					r.refundPaidMessage(ctx, userID, toPeer.ID, paidPrice)
+				}
 				return nil, messageForwardErr(err)
+			}
+			if sent.Duplicate && paid {
+				r.refundPaidMessage(ctx, userID, toPeer.ID, paidPrice)
 			}
 			if !sent.Duplicate {
 				r.enqueueBotAPIPrivateMessageUpdateAsync(ctx, sent)

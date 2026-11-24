@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"testing"
+	"time"
 
 	"github.com/iamxvbaba/td/bin"
 	"github.com/iamxvbaba/td/tg"
@@ -15,9 +16,9 @@ func TestStarGiftProjectionDropsElapsedLockedUntilDate(t *testing.T) {
 		ID: 8201, Stars: 100, ConvertStars: 85, LockedUntilDate: 1750000000,
 	}
 	tests := []struct {
-		name     string
-		now      int64
-		wantSet  bool
+		name    string
+		now     int64
+		wantSet bool
 	}{
 		{name: "future lock date stays advertised", now: 1740000000, wantSet: true},
 		{name: "elapsed lock date is dropped so the client unblocks the gift", now: 1750000001, wantSet: false},
@@ -118,5 +119,31 @@ func TestStarGiftCatalogProjectionKeepsSaleDatesBehindSoldOutFlag(t *testing.T) 
 				}
 			}
 		})
+	}
+}
+
+func TestStarGiftProjectionAdvertisesNextRecurringWindow(t *testing.T) {
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gift := domain.StarGift{
+		ID:                            8301,
+		Stars:                         50,
+		ConvertStars:                  25,
+		PurchaseWindowEnabled:         true,
+		PurchaseWindowStartMinute:     19*60 + 40,
+		PurchaseWindowDurationMinutes: 30,
+		PurchaseWindowTimezone:        "Europe/Kyiv",
+	}
+	closed := tgStarGift(gift, time.Date(2026, 11, 21, 20, 30, 0, 0, kyiv).Unix())
+	locked, ok := closed.GetLockedUntilDate()
+	want := time.Date(2026, 11, 22, 19, 40, 0, 0, kyiv).Unix()
+	if !ok || int64(locked) != want {
+		t.Fatalf("closed window: locked_until_date=(%d,%v), want %d", locked, ok, want)
+	}
+	open := tgStarGift(gift, time.Date(2026, 11, 21, 20, 0, 0, 0, kyiv).Unix())
+	if _, ok := open.GetLockedUntilDate(); ok {
+		t.Fatal("an open window must not advertise a lock")
 	}
 }
