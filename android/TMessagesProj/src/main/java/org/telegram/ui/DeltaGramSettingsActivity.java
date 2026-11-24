@@ -37,6 +37,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
 import org.telegram.ui.Cells.AppIconsSelectorCell;
+import org.telegram.ui.Plugins.DeltamentPluginsActivity;
 import org.telegram.ui.Stars.DeltamentBubbleSkins;
 import org.telegram.ui.Stars.DeltamentProfileMusic;
 import org.telegram.ui.Stars.ProfileGiftsView;
@@ -218,6 +219,8 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 presentFragment(new DeltamentCardSettingsActivity())));
         content.addView(action("Музыка", "Чарты SoundCloud и плеер DeltaGram", R.drawable.files_music, v ->
                 new DeltamentMusicSheet(getParentActivity()).show()));
+        content.addView(action("Плагины", ".plugin: установка, включение, удаление", R.drawable.msg_info, v ->
+                presentFragment(new DeltamentPluginsActivity())));
         addSwitch(content, "Капсула плеера",
                 "Плавающая капсула с играющим треком над нижними вкладками. Тап открывает перемотку и текст",
                 prefs().getBoolean("dg_music_capsule", true), (view, checked) ->

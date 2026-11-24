@@ -232,6 +232,7 @@ import org.telegram.ui.Stories.recorder.StoryEntry;
 import org.telegram.ui.Stories.recorder.StoryRecorder;
 import org.telegram.ui.Stories.LiveStoryPipOverlay;
 import org.telegram.ui.TON.TONIntroActivity;
+import org.telegram.ui.Plugins.DeltamentPluginManager;
 import org.telegram.ui.Wallet.GramWalletStorageAuth;
 import org.telegram.ui.Wallet.WalletActivity;
 import org.telegram.ui.Wallet.WalletSendSelectSender;
@@ -423,6 +424,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (!shareLaunch) {
             DeltamentStartupSound.playOnLaunch(this);
         }
+        // DeltaGram plugins: load everything enabled from files/dg_plugins.
+        DeltamentPluginManager.getInstance().init();
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
             Intent intent = getIntent();
