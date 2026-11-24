@@ -3740,9 +3740,9 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             }
             dgCompactDatePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
             dgCompactDatePaint.setAlpha(90);
-            final int lineY = textY + textLayout.getHeight() / 2;
-            final float textLeft = textXLeft;
-            final float textRight = textXLeft + textLayout.getWidth();
+            final int lineY = textY + textHeight / 2;
+            final float textLeft = textX;
+            final float textRight = textX + textWidth;
             if (textLeft > dp(12)) {
                 canvas.drawLine(0, lineY, textLeft - dp(10), lineY, dgCompactDatePaint);
             }
