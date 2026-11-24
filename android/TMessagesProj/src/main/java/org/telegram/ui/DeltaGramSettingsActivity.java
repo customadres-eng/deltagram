@@ -24,6 +24,7 @@ import android.widget.TextView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -65,6 +66,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     // Kept for old deep links; badges are no longer a settings page.
     public static final int PAGE_BADGES = 4;
     public static final int PAGE_OTHER = 5;
+    public static final int PAGE_INTERFACE = 6;
 
     private static final String EXTRA_PAGE = "deltagram_page";
     private static final int REQUEST_EXPORT = 7419;
@@ -75,6 +77,8 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     private TextView lastValueView;
     private TextView bubbleSkinValueView;
     private TextView giftIntervalValueView;
+    private TextView timeFormatValueView;
+    private TextView edgeSwipeValueView;
 
     public DeltaGramSettingsActivity() {
         this(PAGE_MAIN);
@@ -140,6 +144,9 @@ public class DeltaGramSettingsActivity extends BaseFragment {
             case PAGE_OTHER:
                 buildOther(content);
                 break;
+            case PAGE_INTERFACE:
+                buildInterface(content);
+                break;
             case PAGE_MAIN:
             default:
                 buildMain(content);
@@ -167,6 +174,8 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 return "Чаты";
             case PAGE_OTHER:
                 return "Другое";
+            case PAGE_INTERFACE:
+                return "Интерфейс и оформление";
             case PAGE_MAIN:
             default:
                 return "DeltaGram";
@@ -218,6 +227,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         content.addView(category("Основные", "Удалённые сообщения, приватность, номера", R.drawable.msg_media, PAGE_GENERAL));
         content.addView(category("Внешний вид", "Пузыри, текст, тема", R.drawable.msg_theme, PAGE_APPEARANCE));
         content.addView(category("Чаты", "Свайпы, двойной тап, реакции", R.drawable.msg_discussion, PAGE_CHATS));
+        content.addView(category("Интерфейс и оформление", "Даты, ники, код, меню и жесты", R.drawable.msg_customize, PAGE_INTERFACE));
 
         content.addView(section("Аккаунт"));
         content.addView(action("Домены .ton", "Покупка, продажа и привязка домена", R.drawable.settings_gram_24, v ->
@@ -493,6 +503,178 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 "Автозагрузка, звуки и прочее",
                 null, R.drawable.msg_discussion, v ->
                         presentFragment(new SettingsActivity()));
+    }
+
+    private void buildInterface(LinearLayout content) {
+        content.addView(section("Даты и время"));
+        addChoice(content, "Формат времени",
+                "12 или 24 часа независимо от системной настройки",
+                timeFormatLabel(), R.drawable.msg_calendar2, this::showTimeFormatDialog);
+        timeFormatValueView = lastValueView;
+        addSwitch(content, "Всегда полная дата",
+                "«24.11.2026» вместо «Сегодня» и «Вчера» в разделителях дат",
+                prefs().getBoolean(DeltaGramUi.KEY_FULL_DATE, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_FULL_DATE, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Компактные разделители дат",
+                "Тонкая линия с датой вместо большой плашки",
+                prefs().getBoolean(DeltaGramUi.KEY_COMPACT_DATES, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_COMPACT_DATES, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Липкие заголовки дат",
+                "Дата дня остаётся у верхнего края при прокрутке чата",
+                prefs().getBoolean(DeltaGramUi.KEY_STICKY_DATES, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_STICKY_DATES, checked).apply();
+                    refreshUi();
+                });
+
+        content.addView(section("Имена и код"));
+        addSwitch(content, "Цветные ники по хешу",
+                "У каждого участника свой стабильный цвет имени",
+                prefs().getBoolean(DeltaGramUi.KEY_COLORED_NAMES, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_COLORED_NAMES, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Градиентные ники",
+                "Имя переливается двумя цветами, подобранными по ID",
+                prefs().getBoolean(DeltaGramUi.KEY_GRADIENT_NAMES, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_GRADIENT_NAMES, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Моноширинный шрифт для кода",
+                "Блоки ``` читаются как в редакторе",
+                prefs().getBoolean(DeltaGramUi.KEY_MONO_CODE, true), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_MONO_CODE, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Подсветка синтаксиса",
+                "Ключевые слова, строки и комментарии цветом в блоках кода",
+                prefs().getBoolean(DeltaGramUi.KEY_SYNTAX_HIGHLIGHT, true), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_SYNTAX_HIGHLIGHT, checked).apply();
+                    refreshUi();
+                });
+
+        content.addView(section("Список чатов"));
+        addSwitch(content, "Цветная метка чата",
+                "Полоска слева у непрочитанных диалогов, цвет по ID",
+                prefs().getBoolean(DeltaGramUi.KEY_DIALOG_STRIPE, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_DIALOG_STRIPE, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Только непрочитанные",
+                "Список чатов скрывает всё прочитанное",
+                prefs().getBoolean(DeltaGramUi.KEY_UNREAD_ONLY, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_UNREAD_ONLY, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Фильтры в поиске",
+                "Префиксы: g: — группы, c: — каналы, u: — люди, b: — боты",
+                prefs().getBoolean(DeltaGramUi.KEY_SEARCH_FILTERS, true), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_SEARCH_FILTERS, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Мини-профиль по долгому тапу",
+                "Карточка с аватаром и кнопками без открытия чата",
+                prefs().getBoolean(DeltaGramUi.KEY_QUICK_PROFILE, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_QUICK_PROFILE, checked).apply();
+                    refreshUi();
+                });
+
+        content.addView(section("Меню и жесты"));
+        addSwitch(content, "«Копировать ссылку» в меню чата",
+                "Ссылка t.me на диалог в один тап",
+                prefs().getBoolean(DeltaGramUi.KEY_COPY_LINK_MENU, true), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_COPY_LINK_MENU, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Быстрые действия в меню «⋯»",
+                "Добавляет «Отметить прочитанным» в меню шапки чата",
+                prefs().getBoolean(DeltaGramUi.KEY_CHAT_OVERFLOW, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_CHAT_OVERFLOW, checked).apply();
+                    refreshUi();
+                });
+        addChoice(content, "Свайп от края",
+                "Когда срабатывает жест «назад»",
+                edgeSwipeLabel(), R.drawable.msg_customize, this::showEdgeSwipeDialog);
+        edgeSwipeValueView = lastValueView;
+
+        content.addView(section("Ввод и анимации"));
+        addSwitch(content, "Фиксированная панель ввода",
+                "Список не прыгает при переключении клавиатуры и emoji",
+                prefs().getBoolean(DeltaGramUi.KEY_FIXED_KEYBOARD_PANEL, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_FIXED_KEYBOARD_PANEL, checked).apply();
+                    refreshUi();
+                });
+        addSwitch(content, "Плавное появление сообщений",
+                "Новые сообщения въезжают снизу, без рывка",
+                prefs().getBoolean(DeltaGramUi.KEY_MESSAGE_ANIM, false), (view, checked) -> {
+                    prefs().edit().putBoolean(DeltaGramUi.KEY_MESSAGE_ANIM, checked).apply();
+                    refreshUi();
+                });
+    }
+
+    private String timeFormatLabel() {
+        switch (DeltaGramUi.getTimeFormat()) {
+            case 0:
+                return "12 часов";
+            case 1:
+                return "24 часа";
+            default:
+                return "Системный";
+        }
+    }
+
+    private String edgeSwipeLabel() {
+        switch (DeltaGramUi.getEdgeSwipeMode()) {
+            case 1:
+                return "Только от края";
+            case 2:
+                return "Отключён";
+            default:
+                return "Как в Telegram";
+        }
+    }
+
+    private void showTimeFormatDialog() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Формат времени");
+        builder.setItems(new String[]{"Системный", "12 часов", "24 часа"}, (dialog, which) -> {
+            DeltaGramUi.setTimeFormat(which == 0 ? -1 : which == 1 ? 0 : 1);
+            DeltaGramUi.applyTimeFormat();
+            if (timeFormatValueView != null) {
+                timeFormatValueView.setText(timeFormatLabel());
+            }
+            refreshUi();
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void showEdgeSwipeDialog() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Свайп от края");
+        builder.setItems(new String[]{"Как в Telegram", "Только от края экрана", "Отключён"}, (dialog, which) -> {
+            prefs().edit().putInt(DeltaGramUi.KEY_EDGE_SWIPE, which).apply();
+            if (edgeSwipeValueView != null) {
+                edgeSwipeValueView.setText(edgeSwipeLabel());
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void refreshUi() {
+        NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogsNeedReload);
+        NotificationCenter.getInstance(currentAccount).postNotificationName(
+                NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
     }
 
     private void buildOther(LinearLayout content) {
