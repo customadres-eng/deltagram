@@ -92,7 +92,7 @@ public final class HookBridge {
             }
             python().callAttr(after ? "dispatch_after" : "dispatch_before", hookId, param);
             frame.thisObject = param.thisObject;
-            coerce(param.args, frame.method.getParameterTypes());
+            coerce(param.args, parameterTypes(frame.method));
             if (after && param.resultSet) {
                 frame.setResult(param.result);
             }
@@ -102,6 +102,16 @@ public final class HookBridge {
     }
 
     /** Pine hands over boxed values; reflection needs the exact boxing. */
+    private static Class<?>[] parameterTypes(Member member) {
+        if (member instanceof Method) {
+            return ((Method) member).getParameterTypes();
+        }
+        if (member instanceof java.lang.reflect.Constructor) {
+            return ((java.lang.reflect.Constructor<?>) member).getParameterTypes();
+        }
+        return null;
+    }
+
     private static void coerce(Object[] args, Class<?>[] types) {
         if (args == null || types == null) {
             return;
