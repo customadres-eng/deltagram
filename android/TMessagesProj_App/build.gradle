@@ -19,6 +19,8 @@ configurations.all {
 
 dependencies {
     implementation project(':TMessagesProj')
+    // ART method hooking for Python plugins (hook_all_methods / hook_method).
+    implementation 'top.canyie.pine:core:0.3.0'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
 }

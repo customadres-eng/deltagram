@@ -395,6 +395,37 @@ public final class DeltamentPluginManager {
         }
     }
 
+    // ---------------------------------------------------- python settings API
+
+    private static Object callPython(String method, Class<?>[] types, Object... args) {
+        try {
+            final Class<?> bridge = Class.forName("org.telegram.ui.Plugins.PythonBridge");
+            final java.lang.reflect.Method target = bridge.getMethod(method, types);
+            return target.invoke(null, args);
+        } catch (Throwable e) {
+            FileLog.e(e);
+            return null;
+        }
+    }
+
+    /** JSON array with the plugin's settings widgets, or "" when unavailable. */
+    public static String pythonSettings(String id) {
+        final Object result = callPython("pluginSettings", new Class<?>[]{String.class}, id);
+        return result == null ? "" : result.toString();
+    }
+
+    public static String pythonSetSetting(String id, String key, String valueJson) {
+        final Object result = callPython("setPluginSetting",
+                new Class<?>[]{String.class, String.class, String.class}, id, key, valueJson);
+        return result == null ? "" : result.toString();
+    }
+
+    public static String pythonAction(String id, int index) {
+        final Object result = callPython("pluginAction",
+                new Class<?>[]{String.class, int.class}, id, index);
+        return result == null ? "" : result.toString();
+    }
+
     public synchronized void delete(DeltamentPluginInfo info) {
         if (info == null) {
             return;

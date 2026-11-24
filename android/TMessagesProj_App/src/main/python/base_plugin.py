@@ -1,12 +1,15 @@
-"""Subset of the exteraGram plugin SDK that DeltaGram can honour today.
+"""Subset of the exteraGram plugin SDK implemented by DeltaGram.
 
 Plugins written for exteraGram import ``BasePlugin`` and friends from this
-module, so the import must succeed. Hooks are accepted but not installed yet:
-``hook_method``/``hook_all_methods`` return False and log a message.
+module, hook Java methods with ``hook_all_methods`` and store their settings
+here. Hooks are executed by Pine (see :mod:`dg_hooks`), so ``param.args`` and
+``param.thisObject`` really affect the running app.
 """
 import json
 import os
 import traceback
+
+import dg_hooks
 
 
 class _Logger:
@@ -80,13 +83,20 @@ class MenuItemData:
 
 
 class MethodHook:
-    """Signature-compatible stand-in; real ART hooking is not wired up yet."""
+    """Callback pair installed by :meth:`BasePlugin.hook_all_methods`."""
 
+    def before_hooked_method(self, param):
+        pass
+
+    def after_hooked_method(self, param):
+        pass
+
+    # Older names used by some plugins.
     def before_hook(self, param):
-        return None
+        return self.before_hooked_method(param)
 
     def after_hook(self, param):
-        return None
+        return self.after_hooked_method(param)
 
 
 class BasePlugin:
@@ -156,6 +166,16 @@ class BasePlugin:
 
     # ---------------------------------------------------------------- hooks
 
+    def hook_all_methods(self, cls, method, hook):
+        """Hook every Java method named ``method`` in ``cls``."""
+        return dg_hooks.hook_all_methods(cls, method, hook, self._id)
+
+    def hook_all_constructors(self, cls, hook):
+        return dg_hooks.hook_all_constructors(cls, hook, self._id)
+
+    def hook_method(self, method, hook):
+        return dg_hooks.hook_method(method, hook, self._id)
+
     def _unsupported(self, what):
         self.logger.warning("%s is not supported by this DeltaGram build yet" % what)
         return False
@@ -165,12 +185,6 @@ class BasePlugin:
 
     def add_on_send_message_hook(self, priority=0):
         return self._unsupported("add_on_send_message_hook")
-
-    def hook_method(self, cls, method, hook):
-        return self._unsupported("hook_method(%s)" % method)
-
-    def hook_all_methods(self, cls, method, hook):
-        return self._unsupported("hook_all_methods(%s)" % method)
 
     def add_menu_item(self, item):
         return self._unsupported("add_menu_item(%s)" % getattr(item, "text", ""))

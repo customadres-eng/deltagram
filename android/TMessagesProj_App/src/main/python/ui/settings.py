@@ -1,4 +1,10 @@
-"""Data-only stand-ins for the exteraGram settings widgets."""
+"""Data-only stand-ins for the exteraGram settings widgets.
+
+``SimpleSettingFactory`` is deliberately unusable: the slider factory in the
+SDK builds raw Android views, which DeltaGram does not render. Plugins catch
+the failure and fall back to their pure-Python ``Selector``/``Switch`` items,
+which the Plugins screen renders natively.
+"""
 
 
 class _Widget:
@@ -42,4 +48,5 @@ class EditText(_Widget):
 
 
 class SimpleSettingFactory:
-    pass
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError("custom settings rows are not rendered yet")

@@ -160,6 +160,8 @@ public class DeltamentPluginsActivity extends BaseFragment {
         toggle.setOnCheckedChangeListener((view, checked) -> manager.setPluginEnabled(info, checked));
         row.addView(toggle, LayoutHelper.createFrame(44, 26, Gravity.RIGHT | Gravity.CENTER_VERTICAL));
 
+        row.setOnClickListener(v -> presentFragment(
+                DeltamentPluginSettingsActivity.of(info.id, info.name)));
         row.setOnLongClickListener(v -> {
             confirmDelete(info);
             return true;

@@ -48,4 +48,41 @@ public final class PythonBridge {
             return e.getClass().getSimpleName() + ": " + e.getMessage();
         }
     }
+
+    /** Settings widgets of a plugin, as a JSON array (or an error object). */
+    public static String pluginSettings(String id) {
+        try {
+            ensureStarted(org.telegram.messenger.ApplicationLoader.applicationContext);
+            final PyObject module = Python.getInstance().getModule("dg_host");
+            final PyObject result = module.callAttr("get_settings", id);
+            return result == null ? "[]" : result.toString();
+        } catch (Throwable e) {
+            return "{\"error\":\"" + e.getClass().getSimpleName() + ": "
+                    + String.valueOf(e.getMessage()).replace("\"", "'") + "\"}";
+        }
+    }
+
+    /** Stores one plugin setting; the value is passed as JSON. */
+    public static String setPluginSetting(String id, String key, String valueJson) {
+        try {
+            ensureStarted(org.telegram.messenger.ApplicationLoader.applicationContext);
+            final PyObject module = Python.getInstance().getModule("dg_host");
+            final PyObject result = module.callAttr("set_setting", id, key, valueJson);
+            return result == null ? "" : result.toString();
+        } catch (Throwable e) {
+            return e.getClass().getSimpleName() + ": " + e.getMessage();
+        }
+    }
+
+    /** Runs a clickable settings row (for example "reset to 1x"). */
+    public static String pluginAction(String id, int index) {
+        try {
+            ensureStarted(org.telegram.messenger.ApplicationLoader.applicationContext);
+            final PyObject module = Python.getInstance().getModule("dg_host");
+            final PyObject result = module.callAttr("run_action", id, index);
+            return result == null ? "" : result.toString();
+        } catch (Throwable e) {
+            return e.getClass().getSimpleName() + ": " + e.getMessage();
+        }
+    }
 }
