@@ -1708,6 +1708,7 @@ public class ChatActivity extends BaseFragment implements
     private final static int chat_menu_topic_create = 73;
     private final static int copy_link = 75;
     private final static int dg_mark_read = 76;
+    private final static int dg_chat_stats = 77;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -3820,6 +3821,8 @@ public class ChatActivity extends BaseFragment implements
                     }
                 } else if (id == dg_mark_read) {
                     dgMarkAsRead();
+                } else if (id == dg_chat_stats) {
+                    presentFragment(DeltaGramChatStatsActivity.of(dialog_id));
                 } else if (id == charge_fee ) {
                     long user_id = dialog_id;
                     long parent_id = 0;
@@ -4556,6 +4559,7 @@ public class ChatActivity extends BaseFragment implements
                 if (DeltaGramUi.chatOverflow() && chatMode == 0 && !isTopic) {
                     headerItem.lazilyAddSubItem(dg_mark_read, R.drawable.msg_markunread, "Отметить прочитанным");
                 }
+                headerItem.lazilyAddSubItem(dg_chat_stats, R.drawable.msg_stats, "Итоги чата");
             }
         } else if (chatMode == MODE_EDIT_BUSINESS_LINK) {
             headerItem = menu.addItem(chat_menu_options, otherIcon);
