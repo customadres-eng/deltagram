@@ -96,6 +96,49 @@ public final class DeltamentMusicPlayer {
         }
     }
 
+    /** Track duration in ms: from the player when ready, otherwise the metadata. */
+    public long getDurationMs() {
+        try {
+            if (player != null && prepared) {
+                final long duration = player.getDuration();
+                if (duration > 0 && duration != C.TIME_UNSET) {
+                    return duration;
+                }
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        return currentTrack != null ? Math.max(0L, currentTrack.durationMs) : 0L;
+    }
+
+    /** Seeks inside the current track; ignored until it is prepared. */
+    public void seekTo(long positionMs) {
+        try {
+            if (player != null && prepared) {
+                final long duration = getDurationMs();
+                final long target = duration > 0
+                        ? Math.max(0L, Math.min(positionMs, duration))
+                        : Math.max(0L, positionMs);
+                player.seekTo(target);
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    /** Rewinds to the start, or plays the previous track from the queue. */
+    public void previous() {
+        if (getPositionMs() > 3000L) {
+            seekTo(0L);
+            return;
+        }
+        if (queueIndex > 0) {
+            playAt(queueIndex - 1);
+        } else {
+            seekTo(0L);
+        }
+    }
+
     public void play(DeltamentSoundCloudClient.Track track) {
         if (track == null) {
             return;
