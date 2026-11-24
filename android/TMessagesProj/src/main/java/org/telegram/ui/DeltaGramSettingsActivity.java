@@ -242,6 +242,18 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                     prefs().edit().putBoolean("deltagram_keep_deleted", checked).apply();
                 });
 
+        content.addView(section("Запуск"));
+        addSwitch(content, "Звук при запуске",
+                "Короткий приветственный джингл при открытии DeltaGram. Выключи, если не нужен",
+                DeltamentStartupSound.isEnabled(), (view, checked) -> {
+                    DeltamentStartupSound.setEnabled(checked);
+                    if (checked) {
+                        DeltamentStartupSound.playPreview(this);
+                    }
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                            checked ? "Звук при запуске включён" : "Звук при запуске выключен").show();
+                });
+
         content.addView(section("Приватность"));
         addSwitch(content, "Скрывать номер телефона",
                 "В профиле вместо номера будет написано «Скрыто»",
