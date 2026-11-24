@@ -71,8 +71,8 @@ public final class DeltaGramBackup {
         root.put("schema", SCHEMA);
         root.put("app", BuildVars.BUILD_VERSION_STRING);
         root.put("createdAt", System.currentTimeMillis());
-        root.put("prefs", encodePrefs(MessagesController.getGlobalMainSettings()));
-        root.put("music", encodePrefs(context.getSharedPreferences(MUSIC_PREFS, Context.MODE_PRIVATE)));
+        root.put("prefs", encodePrefs(MessagesController.getGlobalMainSettings(), true));
+        root.put("music", encodePrefs(context.getSharedPreferences(MUSIC_PREFS, Context.MODE_PRIVATE), false));
 
         final DeltamentPluginManager manager = DeltamentPluginManager.getInstance();
         manager.init();
@@ -100,6 +100,14 @@ public final class DeltaGramBackup {
                     FileLog.e(e);
                 }
             }
+
+            // Preferences of DEX plugins (and of the Python host, if a plugin
+            // used DeltamentPluginContext#getPrefs()).
+            final SharedPreferences pluginPrefs = context.getSharedPreferences(
+                    "deltagram_plugin_" + info.id, Context.MODE_PRIVATE);
+            if (!pluginPrefs.getAll().isEmpty()) {
+                entry.put("contextPrefs", encodePrefs(pluginPrefs, false));
+            }
             plugins.put(entry);
         }
         root.put("plugins", plugins);
@@ -116,11 +124,11 @@ public final class DeltaGramBackup {
         }
     }
 
-    private static JSONObject encodePrefs(SharedPreferences prefs) throws Exception {
+    private static JSONObject encodePrefs(SharedPreferences prefs, boolean onlyDeltaGram) throws Exception {
         final JSONObject out = new JSONObject();
         final java.util.Map<String, ?> all = prefs.getAll();
         for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
-            if (!isDeltaGramKey(entry.getKey())) {
+            if (onlyDeltaGram && !isDeltaGramKey(entry.getKey())) {
                 continue;
             }
             final JSONObject value = encodeValue(entry.getValue());
@@ -334,13 +342,29 @@ public final class DeltaGramBackup {
                     }
 
                     final JSONObject settings = entry.optJSONObject("settings");
+                    final JSONObject contextPrefs = entry.optJSONObject("contextPrefs");
+                    boolean restoredSettings = false;
                     if (settings != null) {
                         final File pluginDir = new File(dir, id);
                         if (pluginDir.exists() || pluginDir.mkdirs()) {
                             writeBytes(new File(pluginDir, "settings.json"),
                                     settings.toString().getBytes("UTF-8"));
-                            result.pluginSettings++;
+                            restoredSettings = true;
                         }
+                    }
+                    if (contextPrefs != null) {
+                        final SharedPreferences.Editor pluginEditor = context.getSharedPreferences(
+                                "deltagram_plugin_" + id, Context.MODE_PRIVATE).edit();
+                        pluginEditor.clear();
+                        for (Iterator<String> it = contextPrefs.keys(); it.hasNext(); ) {
+                            final String key = it.next();
+                            putValue(pluginEditor, key, contextPrefs.optJSONObject(key));
+                        }
+                        pluginEditor.apply();
+                        restoredSettings = true;
+                    }
+                    if (restoredSettings) {
+                        result.pluginSettings++;
                     }
                     result.pluginCount++;
                 } catch (Throwable e) {

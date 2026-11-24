@@ -64,10 +64,10 @@ jobs:
           key: classes-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             classes-${{ runner.os }}-
-      - name: Build release APK
+      - name: Build debug APK
         working-directory: android
         run: |
-          ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon \
+          ./gradlew :TMessagesProj_App:assembleAfatDebug --no-daemon \
             -PdgAbis=arm64-v8a \
             -PdgCcache \
             -Dorg.gradle.workers.max=4
@@ -76,8 +76,8 @@ jobs:
         run: ccache --show-stats || true
       - uses: actions/upload-artifact@v4
         with:
-          name: DeltaGram-release
-          path: android/TMessagesProj_App/build/outputs/apk/afat/release/app.apk
+          name: DeltaGram-debug
+          path: android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
       - name: Save ccache
         # actions/cache skips its save step when the job fails, which is why
         # the first failed run left the cache empty. Save it no matter what.
