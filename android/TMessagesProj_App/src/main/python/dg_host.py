@@ -35,10 +35,16 @@ _loaded = {}
 def _entry_class(module, module_name):
     from base_plugin import BasePlugin
 
+    # Plugins overwrite __name__ with their display name (__name__ = "Animation
+    # Speed"), so classes defined in the file carry that as __module__. Accept
+    # both the real module name and the module's current __name__.
+    names = {module_name, getattr(module, "__name__", None)}
     for value in vars(module).values():
-        if isinstance(value, type) and value.__name__ != "BasePlugin" \
-                and getattr(value, "__module__", None) == module_name \
-                and issubclass(value, BasePlugin):
+        if not isinstance(value, type) or value is BasePlugin:
+            continue
+        if not issubclass(value, BasePlugin):
+            continue
+        if getattr(value, "__module__", None) in names:
             return value
     return None
 
