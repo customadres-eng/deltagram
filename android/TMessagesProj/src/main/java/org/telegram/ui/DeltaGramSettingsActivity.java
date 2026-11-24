@@ -218,6 +218,10 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 presentFragment(new DeltamentCardSettingsActivity())));
         content.addView(action("Музыка", "Чарты SoundCloud и плеер DeltaGram", R.drawable.files_music, v ->
                 new DeltamentMusicSheet(getParentActivity()).show()));
+        addSwitch(content, "Капсула плеера",
+                "Плавающая капсула с играющим треком над нижними вкладками. Тап открывает перемотку и текст",
+                prefs().getBoolean("dg_music_capsule", true), (view, checked) ->
+                        prefs().edit().putBoolean("dg_music_capsule", checked).apply());
 
         content.addView(section("О клиенте"));
         content.addView(category("Другое", "Обновления, ссылки, сброс настроек", R.drawable.msg_fave, PAGE_OTHER));

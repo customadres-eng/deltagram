@@ -70,6 +70,9 @@ public class DeltamentNowPlayingView extends LinearLayout {
     private boolean bound;
     private long boundTrackId = Long.MIN_VALUE;
 
+    private static final float[] SPEEDS = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
+    private final ArrayList<TextView> speedChips = new ArrayList<>();
+
     private final Runnable ticker = new Runnable() {
         @Override
         public void run() {
@@ -115,6 +118,7 @@ public class DeltamentNowPlayingView extends LinearLayout {
         bindTrack(music.currentTrack);
         updateTotal();
         updatePlayIcon();
+        updateSpeedChips();
         handler.removeCallbacks(ticker);
         handler.post(ticker);
     }
@@ -255,6 +259,27 @@ public class DeltamentNowPlayingView extends LinearLayout {
 
         addView(controls, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
+        // Playback speed: 0.5x .. 2x, remembered by DeltamentMusicPlayer.
+        final LinearLayout speedRow = new LinearLayout(context);
+        speedRow.setOrientation(HORIZONTAL);
+        speedRow.setGravity(Gravity.CENTER);
+        speedRow.setPadding(0, dp(2), 0, dp(6));
+        addView(speedRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        for (int i = 0; i < SPEEDS.length; i++) {
+            final float value = SPEEDS[i];
+            final TextView chip = new TextView(context);
+            chip.setText(speedLabel(value));
+            chip.setTextSize(12);
+            chip.setGravity(Gravity.CENTER);
+            chip.setOnClickListener(v -> {
+                music.setSpeed(value);
+                updateSpeedChips();
+            });
+            speedRow.addView(chip, LayoutHelper.createLinear(0, 28, 1f, 2, 0, 2, 0));
+            speedChips.add(chip);
+        }
+        updateSpeedChips();
+
         // Lyrics header.
         final LinearLayout lyricsHeader = new LinearLayout(context);
         lyricsHeader.setOrientation(HORIZONTAL);
@@ -389,6 +414,34 @@ public class DeltamentNowPlayingView extends LinearLayout {
             playButton.setImageResource(playing ? R.drawable.ic_action_pause : R.drawable.ic_action_play);
             pop(playButton);
         }
+    }
+
+    private void updateSpeedChips() {
+        if (speedChips.isEmpty()) {
+            return;
+        }
+        final float current = music.getSpeed();
+        for (int i = 0; i < speedChips.size(); i++) {
+            final boolean active = Math.abs(SPEEDS[i] - current) < 0.01f;
+            final TextView chip = speedChips.get(i);
+            chip.setTextColor(active ? COLOR_TEXT : COLOR_TEXT_SECONDARY);
+            chip.setBackground(rounded(active ? COLOR_BLUE : COLOR_FIELD, dp(10)));
+            chip.setTypeface(Typeface.create(Typeface.DEFAULT,
+                    active ? Typeface.BOLD : Typeface.NORMAL));
+        }
+    }
+
+    private static String speedLabel(float value) {
+        if (value == Math.round(value)) {
+            return ((int) value) + "×";
+        }
+        if (value == 0.75f) {
+            return "0.75×";
+        }
+        if (value == 1.25f) {
+            return "1.25×";
+        }
+        return String.format(Locale.US, "%s×", String.valueOf(value));
     }
 
     // ------------------------------------------------------------------- lyrics

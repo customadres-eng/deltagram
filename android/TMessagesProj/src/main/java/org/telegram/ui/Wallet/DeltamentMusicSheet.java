@@ -97,6 +97,7 @@ public class DeltamentMusicSheet extends BottomSheet {
     private View headerView;
     private DeltamentNowPlayingView nowPlayingView;
     private boolean playerExpanded;
+    private boolean openPlayerRequested;
 
     private final ArrayList<DeltamentSoundCloudClient.Track> visible = new ArrayList<>();
     private final DeltamentMusicPlayer music = DeltamentMusicPlayer.getInstance();
@@ -159,8 +160,7 @@ public class DeltamentMusicSheet extends BottomSheet {
             }
         });
 
-        DeltamentSoundCloudClient.preload(new DeltamentSoundCloudClient.Callback<Boolean>() {
-            @Override
+        DeltamentSoundCloudClient.preload(new DeltamentSoundCloudClient.Callback<Boolean>() {            @Override
             public void onSuccess(Boolean result) {
                 if (source == SOURCE_SOUNDCLOUD && mode == MODE_SEARCH && visible.isEmpty() && TextUtils.isEmpty(query())) {
                     statusView.setText("введите запрос");
@@ -177,6 +177,21 @@ public class DeltamentMusicSheet extends BottomSheet {
     }
 
     // ---------------------------------------------------------------- ui build
+
+    /** Opens the sheet directly on the full now-playing panel. */
+    public DeltamentMusicSheet openPlayer() {
+        openPlayerRequested = true;
+        return this;
+    }
+
+    @Override
+    public void show() {
+        super.show();
+        if (openPlayerRequested) {
+            openPlayerRequested = false;
+            AndroidUtilities.runOnUIThread(this::expandPlayer);
+        }
+    }
 
     private void buildHeader() {
         final FrameLayout header = new FrameLayout(context);

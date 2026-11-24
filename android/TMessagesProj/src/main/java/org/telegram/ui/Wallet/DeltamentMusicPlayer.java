@@ -1,6 +1,7 @@
 package org.telegram.ui.Wallet;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
@@ -57,6 +58,7 @@ public final class DeltamentMusicPlayer {
     private ExoPlayer player;
     private boolean prepared, playing, loading;
     private int loadGeneration;
+    private float speed;
 
     private DeltamentMusicPlayer() {
     }
@@ -127,8 +129,7 @@ public final class DeltamentMusicPlayer {
     }
 
     /** Rewinds to the start, or plays the previous track from the queue. */
-    public void previous() {
-        if (getPositionMs() > 3000L) {
+    public void previous() {        if (getPositionMs() > 3000L) {
             seekTo(0L);
             return;
         }
@@ -136,6 +137,48 @@ public final class DeltamentMusicPlayer {
             playAt(queueIndex - 1);
         } else {
             seekTo(0L);
+        }
+    }
+
+    /** Playback speed, clamped to 0.5x..2x and remembered across launches. */
+    public float getSpeed() {
+        if (speed <= 0f) {
+            try {
+                speed = prefs().getFloat("speed", 1f);
+            } catch (Throwable e) {
+                speed = 1f;
+            }
+            if (speed < 0.5f || speed > 2f) {
+                speed = 1f;
+            }
+        }
+        return speed;
+    }
+
+    public void setSpeed(float value) {
+        final float clamped = Math.max(0.5f, Math.min(2f, value));
+        speed = clamped;
+        try {
+            prefs().edit().putFloat("speed", clamped).apply();
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        applySpeed();
+        notifyState();
+    }
+
+    private SharedPreferences prefs() {
+        return ApplicationLoader.applicationContext
+                .getSharedPreferences("deltagram_music", Context.MODE_PRIVATE);
+    }
+
+    private void applySpeed() {
+        try {
+            if (player != null) {
+                player.setPlaybackSpeed(getSpeed());
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
         }
     }
 
@@ -263,6 +306,7 @@ public final class DeltamentMusicPlayer {
                 }
             });
             player.setMediaItem(MediaItem.fromUri(url));
+            player.setPlaybackSpeed(getSpeed());
             player.prepare();
             player.play();
         } catch (Throwable e) {
