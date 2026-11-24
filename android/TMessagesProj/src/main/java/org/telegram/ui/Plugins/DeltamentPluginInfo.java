@@ -15,6 +15,7 @@ public final class DeltamentPluginInfo {
 
     public boolean enabled = true;
     public boolean loaded;
+    public boolean python;
     public String error;
 
     DeltamentPluginInfo(String id, String name, String version, String author,

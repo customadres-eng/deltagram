@@ -129,6 +129,7 @@ public class DeltamentPluginsActivity extends BaseFragment {
         texts.addView(name, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         final StringBuilder subtitle = new StringBuilder();
+        subtitle.append(info.python ? "Python · " : "DEX · ");
         subtitle.append("v").append(info.version);
         if (!TextUtils.isEmpty(info.author)) {
             subtitle.append(" · ").append(info.author);

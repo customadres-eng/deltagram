@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.telegram.build-app-plugin'
+// Python runtime for exteraGram-style .plugin files.
+apply plugin: 'com.chaquo.python'
 
 repositories {
     mavenCentral()
@@ -173,10 +175,14 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion 23
+        minSdkVersion 24
         targetSdkVersion 36
         versionName APP_VERSION_NAME
         ndkVersion "27.2.12479018"
+
+        ndk {
+            abiFilters(*dgAbis)
+        }
 
         multiDexEnabled true
 
@@ -198,6 +204,18 @@ android {
 
     lintOptions {
         checkReleaseBuilds false
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        // 3.11 keeps armeabi-v7a support for local two-ABI builds.
+        version = "3.11"
+        pyc {
+            // No Python on CI: ship sources, compile them on the device.
+            src = false
+            stdlib = false
+        }
     }
 }
 

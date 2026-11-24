@@ -150,9 +150,55 @@ public final class DeltamentPluginManager {
                     json.optString("description", ""),
                     entry,
                     file);
+        } catch (java.util.zip.ZipException notDex) {
+            return parsePython(file);
         } catch (Throwable e) {
             FileLog.e(e);
             return null;
+        }
+    }
+
+    /** exteraGram-style plugin: a single Python file with __id__ and BasePlugin. */
+    private DeltamentPluginInfo parsePython(File file) {
+        final String text = readText(file);
+        if (!text.contains("BasePlugin")) {
+            return null;
+        }
+        final String id = sanitizeId(first(text, "__id__\\s*=\\s*[\"']([^\"']+)[\"']"));
+        if (TextUtils.isEmpty(id)) {
+            return null;
+        }
+        final String name = first(text, "__name__\\s*=\\s*[\"']([^\"']+)[\"']");
+        final DeltamentPluginInfo info = new DeltamentPluginInfo(
+                id,
+                TextUtils.isEmpty(name) ? id : name,
+                first(text, "__version__\\s*=\\s*[\"']([^\"']+)[\"']"),
+                first(text, "__author__\\s*=\\s*[\"']([^\"']+)[\"']"),
+                first(text, "__description__\\s*=\\s*[\"']([^\"']+)[\"']"),
+                "",
+                file);
+        info.python = true;
+        return info;
+    }
+
+    private static String first(String text, String regex) {
+        final java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(regex).matcher(text);
+        return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private static String readText(File file) {
+        try {
+            final byte[] bytes = new byte[(int) Math.min(file.length(), 256 * 1024)];
+            try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+                int read = 0;
+                int chunk;
+                while (read < bytes.length && (chunk = in.read(bytes, read, bytes.length - read)) > 0) {
+                    read += chunk;
+                }
+                return new String(bytes, 0, read, "UTF-8");
+            }
+        } catch (Throwable e) {
+            return "";
         }
     }
 
@@ -191,7 +237,7 @@ public final class DeltamentPluginManager {
             }
         }
 
-        final String id;
+        String id;
         try (ZipFile zip = new ZipFile(temp)) {
             final JSONObject json = readManifest(zip);
             if (json == null || zip.getEntry("classes.dex") == null) {
@@ -203,6 +249,14 @@ public final class DeltamentPluginManager {
                 temp.delete();
                 throw new IOException("в manifest.json нет id или entry");
             }
+        } catch (java.util.zip.ZipException pythonPlugin) {
+            final DeltamentPluginInfo parsed = parsePython(temp);
+            if (parsed == null) {
+                temp.delete();
+                throw new IOException("это не .plugin: нужен manifest.json + classes.dex "
+                        + "или Python-плагин с BasePlugin");
+            }
+            id = parsed.id;
         }
 
         final File dest = new File(dir, id + ".plugin");
@@ -266,6 +320,15 @@ public final class DeltamentPluginManager {
             info.loaded = true;
             return true;
         }
+        if (info.python) {
+            final String error = pythonLoad(info);
+            info.loaded = TextUtils.isEmpty(error);
+            info.error = info.loaded ? null : error;
+            if (info.loaded) {
+                FileLog.d("[dg-plugin] loaded python plugin " + info.id);
+            }
+            return info.loaded;
+        }
         try {
             final File codeCache = new File(ApplicationLoader.applicationContext.getCodeCacheDir(), "dg_plugins");
             codeCache.mkdirs();
@@ -302,7 +365,34 @@ public final class DeltamentPluginManager {
                 FileLog.e(e);
             }
         }
+        if (info.python) {
+            pythonUnload(info.id);
+        }
         info.loaded = false;
+    }
+
+    private static String pythonLoad(DeltamentPluginInfo info) {
+        try {
+            final Class<?> bridge = Class.forName("org.telegram.ui.Plugins.PythonBridge");
+            final java.lang.reflect.Method method = bridge.getMethod("loadPlugin",
+                    android.content.Context.class, String.class, String.class);
+            final Object result = method.invoke(null,
+                    ApplicationLoader.applicationContext, info.file.getAbsolutePath(), info.id);
+            return result == null ? "" : result.toString();
+        } catch (Throwable e) {
+            FileLog.e(e);
+            return e.getClass().getSimpleName() + ": " + e.getMessage();
+        }
+    }
+
+    private static void pythonUnload(String id) {
+        try {
+            final Class<?> bridge = Class.forName("org.telegram.ui.Plugins.PythonBridge");
+            final java.lang.reflect.Method method = bridge.getMethod("unloadPlugin", String.class);
+            method.invoke(null, id);
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
     }
 
     public synchronized void delete(DeltamentPluginInfo info) {
