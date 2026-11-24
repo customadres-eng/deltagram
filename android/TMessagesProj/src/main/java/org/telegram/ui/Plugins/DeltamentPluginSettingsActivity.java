@@ -38,9 +38,15 @@ public class DeltamentPluginSettingsActivity extends BaseFragment {
         final Bundle args = new Bundle();
         args.putString(ARG_ID, id);
         args.putString(ARG_NAME, name);
-        final DeltamentPluginSettingsActivity fragment = new DeltamentPluginSettingsActivity();
-        fragment.setArguments(args);
-        return fragment;
+        return new DeltamentPluginSettingsActivity(args);
+    }
+
+    public DeltamentPluginSettingsActivity() {
+        super();
+    }
+
+    public DeltamentPluginSettingsActivity(Bundle args) {
+        super(args);
     }
 
     @Override
