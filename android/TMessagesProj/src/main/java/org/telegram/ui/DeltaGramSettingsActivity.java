@@ -244,7 +244,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 DeltamentStartupSound.isEnabled(), (view, checked) -> {
                     DeltamentStartupSound.setEnabled(checked);
                     if (checked) {
-                        DeltamentStartupSound.playPreview(this);
+                        DeltamentStartupSound.playPreview(getParentActivity());
                     }
                     BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
                             checked ? "Звук при запуске включён" : "Звук при запуске выключен").show();

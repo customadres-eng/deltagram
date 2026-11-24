@@ -945,19 +945,19 @@ public class DeltamentMusicSheet extends BottomSheet {
         }
         setStatus("");
         for (int i = 0; i < queue.size(); i++) {
-            final int index = i;
+            final int rowIndex = i;
             final DeltamentSoundCloudClient.Track track = queue.get(i);
             final LinearLayout row = new LinearLayout(context);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(8), dp(10), dp(8), dp(10));
-            if (index == music.queueIndex) {
+            if (rowIndex == music.queueIndex) {
                 row.setBackground(ripple(0xFF2A2A2D, dp(12)));
             } else {
                 row.setBackground(ripple(0x00000000, dp(12)));
             }
             row.setOnClickListener(v -> {
-                if (index == music.queueIndex) {
+                if (rowIndex == music.queueIndex) {
                     expandPlayer();
                 } else {
                     music.playAt(indexOfTrack(track));
