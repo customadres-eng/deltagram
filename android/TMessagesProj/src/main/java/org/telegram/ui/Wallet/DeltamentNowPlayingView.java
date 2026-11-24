@@ -42,6 +42,7 @@ public class DeltamentNowPlayingView extends LinearLayout {
     private static final int COLOR_TEXT = 0xFFFFFFFF;
     private static final int COLOR_TEXT_SECONDARY = 0xFF8E8E93;
     private static final int COLOR_FIELD = 0xFF2C2C2E;
+    private static final int COLOR_BLUE = 0xFF3B7DF6;
     private static final int COLOR_LYRIC_DIM = 0x66FFFFFF;
     private static final int COLOR_PLAY_ON_LIGHT = 0xFF6B1622;
 
