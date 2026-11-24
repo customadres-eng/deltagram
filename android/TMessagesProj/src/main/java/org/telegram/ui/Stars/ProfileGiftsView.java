@@ -3119,9 +3119,14 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         return dpf2(24);
     }
 
-    /** Topmost y a bubble may reach: below the status bar and the action bar. */
+    /**
+     * Topmost y a bubble may reach. The profile header is translucent, so the
+     * bubbles are free to fly up to the status bar: the only limit keeps the
+     * whole sphere inside the screen, it does not reserve the action bar any
+     * more (that used to stop the drag ~34 dp below the top icons).
+     */
     private float dragTop() {
-        return AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight() + dp(34);
+        return AndroidUtilities.statusBarHeight + dp(27);
     }
 
     /** Lowest y a dragged bubble may reach (above the system navigation bar). */
