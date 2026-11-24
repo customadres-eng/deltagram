@@ -8901,26 +8901,26 @@ public class MessagesStorage extends BaseController {
      */
     public void getChatStats(long dialogId, DeltaGramChatStats.Callback callback) {
         storageQueue.postRunnable(() -> {
-            final DeltaGramChatStats stats = new DeltaGramChatStats();
-            stats.dialogId = dialogId;
+            DeltaGramChatStats stats = null;
             SQLiteCursor cursor = null;
             try {
+                final long selfId = UserConfig.getInstance(currentAccount).clientUserId;
+                final DeltaGramChatStats.Builder builder = new DeltaGramChatStats.Builder(selfId, dialogId);
+
+                int totalMessages = 0;
+                int oldestMid = 0;
                 cursor = database.queryFinalized(String.format(Locale.US,
-                        "SELECT COUNT(mid) FROM messages_v2 WHERE uid = %d", dialogId));
+                        "SELECT COUNT(mid), MIN(mid) FROM messages_v2 WHERE uid = %d AND date > 0 AND mid > 0",
+                        dialogId));
                 if (cursor.next()) {
-                    stats.totalMessages = cursor.intValue(0);
+                    totalMessages = cursor.intValue(0);
+                    oldestMid = cursor.intValue(1);
                 }
                 cursor.dispose();
                 cursor = null;
 
-                final HashMap<Long, DeltaGramChatStats.SenderStat> senders = new HashMap<>();
-                final HashMap<String, DeltaGramChatStats.EmojiStat> emojis = new HashMap<>();
-                final long selfId = UserConfig.getInstance(currentAccount).clientUserId;
-                long prevDate = 0;
-                long prevSender = 0;
-
                 cursor = database.queryFinalized(String.format(Locale.US,
-                        "SELECT date, data FROM messages_v2 WHERE uid = %d ORDER BY date DESC LIMIT %d",
+                        "SELECT date, data FROM messages_v2 WHERE uid = %d AND date > 0 AND mid > 0 ORDER BY date DESC LIMIT %d",
                         dialogId, DeltaGramChatStats.MAX_SCANNED));
                 while (cursor.next()) {
                     final int date = cursor.intValue(0);
@@ -8939,130 +8939,24 @@ public class MessagesStorage extends BaseController {
                     if (message == null) {
                         continue;
                     }
-
-                    stats.scannedMessages++;
-                    if (stats.lastMessageDate == 0) {
-                        stats.lastMessageDate = date;
-                    }
-                    stats.firstMessageDate = date;
-
-                    long senderId;
-                    if (message.out) {
-                        senderId = selfId;
-                        stats.outMessages++;
-                    } else if (message.from_id != null) {
-                        senderId = DialogObject.getPeerDialogId(message.from_id);
-                    } else {
-                        senderId = dialogId;
-                    }
-                    if (senderId == 0) {
-                        senderId = dialogId;
-                    }
-
-                    if (message.action != null) {
-                        stats.serviceMessages++;
-                    } else {
-                        DeltaGramChatStats.SenderStat senderStat = senders.get(senderId);
-                        if (senderStat == null) {
-                            senders.put(senderId, senderStat = new DeltaGramChatStats.SenderStat(senderId));
-                        }
-                        senderStat.count++;
-                    }
-
-                    classifyMedia(message, stats);
-                    DeltaGramChatStats.collectEmojis(message.message, emojis);
-
-                    final int offset = TimeZone.getDefault().getOffset(date * 1000L) / 1000;
-                    final int hour = (int) (((date + offset) / 3600L) % 24L);
-                    if (hour >= 0 && hour < 24) {
-                        stats.byHour[hour]++;
-                    }
-
-                    if (prevDate > 0 && prevDate > date) {
-                        final long gap = prevDate - date;
-                        if (gap > stats.longestPauseSeconds) {
-                            stats.longestPauseSeconds = gap;
-                            stats.longestPauseStartDate = date;
-                            stats.longestPauseEndDate = prevDate;
-                            stats.longestPauseFirstSenderId = senderId;
-                            stats.longestPauseSecondSenderId = prevSender;
-                        }
-                    }
-                    prevDate = date;
-                    prevSender = senderId;
+                    builder.add(message, date);
                 }
 
-                final ArrayList<DeltaGramChatStats.SenderStat> senderList = new ArrayList<>(senders.values());
-                Collections.sort(senderList, (a, b) -> Integer.compare(b.count, a.count));
-                for (int i = 0; i < Math.min(5, senderList.size()); i++) {
-                    stats.topSenders.add(senderList.get(i));
-                }
-
-                final ArrayList<DeltaGramChatStats.EmojiStat> emojiList = new ArrayList<>(emojis.values());
-                Collections.sort(emojiList, (a, b) -> Integer.compare(b.count, a.count));
-                for (int i = 0; i < Math.min(5, emojiList.size()); i++) {
-                    stats.topEmojis.add(emojiList.get(i));
-                }
-
-                stats.truncated = stats.totalMessages > stats.scannedMessages;
+                stats = builder.build();
+                stats.totalMessages = totalMessages;
+                stats.dbOldestMid = oldestMid;
+                stats.truncated = totalMessages > stats.scannedMessages;
             } catch (Exception e) {
                 checkSQLException(e);
             } finally {
                 if (cursor != null) {
                     cursor.dispose();
                 }
-                AndroidUtilities.runOnUIThread(() -> callback.run(stats));
+                final DeltaGramChatStats result = stats != null ? stats : new DeltaGramChatStats();
+                result.dialogId = dialogId;
+                AndroidUtilities.runOnUIThread(() -> callback.run(result));
             }
         });
-    }
-
-    private static void classifyMedia(TLRPC.Message message, DeltaGramChatStats stats) {
-        if (message == null || message.media == null) {
-            return;
-        }
-        if (message.media instanceof TLRPC.TL_messageMediaPhoto) {
-            stats.photos++;
-            return;
-        }
-        if (!(message.media instanceof TLRPC.TL_messageMediaDocument)) {
-            return;
-        }
-        final TLRPC.Document document = ((TLRPC.TL_messageMediaDocument) message.media).document;
-        if (document == null) {
-            stats.files++;
-            return;
-        }
-        boolean sticker = false;
-        boolean gif = false;
-        boolean voice = false;
-        boolean video = false;
-        if (document.attributes != null) {
-            for (int i = 0; i < document.attributes.size(); i++) {
-                final TLRPC.DocumentAttribute attribute = document.attributes.get(i);
-                if (attribute instanceof TLRPC.TL_documentAttributeSticker) {
-                    sticker = true;
-                } else if (attribute instanceof TLRPC.TL_documentAttributeAnimated) {
-                    gif = true;
-                } else if (attribute instanceof TLRPC.TL_documentAttributeVideo) {
-                    video = true;
-                } else if (attribute instanceof TLRPC.TL_documentAttributeAudio) {
-                    if (((TLRPC.TL_documentAttributeAudio) attribute).voice) {
-                        voice = true;
-                    }
-                }
-            }
-        }
-        if (sticker) {
-            stats.stickers++;
-        } else if (gif) {
-            stats.gifs++;
-        } else if (voice) {
-            stats.voice++;
-        } else if (video) {
-            stats.videos++;
-        } else {
-            stats.files++;
-        }
     }
 
     public Runnable getMessagesInternal(long dialogId, long mergeDialogId, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, int mode, long threadMessageId, int loadIndex, boolean processMessages, boolean isTopic, Timer loaderLogger) {

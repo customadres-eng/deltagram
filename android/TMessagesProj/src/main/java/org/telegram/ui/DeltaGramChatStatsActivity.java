@@ -29,6 +29,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DeltaGramChatStats;
+import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.R;
@@ -44,6 +45,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
 
 /**
@@ -62,6 +64,24 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
     private LinearLayout contentView;
     private TextView loadingView;
     private DeltaGramChatStats stats;
+
+    private DeltaGramChatStats remoteStats;
+    private DeltaGramChatStats.Builder remoteBuilder;
+    private TextView heroCountView;
+    private TextView heroPeriodView;
+    private TextView progressView;
+    private String historyStatus;
+    private int oldestLoadedId;
+    private boolean remoteStarted;
+    private boolean remoteDone;
+    private boolean remoteStopped;
+    private int floodRetries;
+    private int pagesSinceRender;
+    private int pagesLoaded;
+
+    private static final HashMap<Long, DeltaGramChatStats> sCache = new HashMap<>();
+    private static final HashMap<Long, Long> sCacheTime = new HashMap<>();
+    private static final long CACHE_TTL = 10 * 60 * 1000L;
 
     public DeltaGramChatStatsActivity(Bundle args) {
         super(args);
@@ -130,11 +150,211 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
                 return;
             }
             stats = result;
+            final DeltaGramChatStats cached = sCache.get(dialogId);
+            final Long cachedAt = sCacheTime.get(dialogId);
+            if (cached != null && cached.scannedMessages > 0 && cachedAt != null
+                    && System.currentTimeMillis() - cachedAt < CACHE_TTL) {
+                stats = cached;
+                historyStatus = "Учтено " + formatNumber(cached.scannedMessages) + " сообщений истории";
+                buildContent();
+                if (loadingView != null) {
+                    loadingView.setVisibility(View.GONE);
+                }
+                return;
+            }
             buildContent();
             if (loadingView != null) {
                 loadingView.setVisibility(View.GONE);
             }
+            startHistoryLoad();
         });
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Full history                                                        */
+    /* ------------------------------------------------------------------ */
+
+    private void startHistoryLoad() {
+        if (remoteStarted || remoteDone || getParentActivity() == null || dialogId == 0) {
+            return;
+        }
+        if (DialogObject.isEncryptedDialog(dialogId)) {
+            return;
+        }
+        if (stats != null && stats.dbOldestMid > 0 && stats.dbOldestMid <= 1
+                && stats.totalMessages <= DeltaGramChatStats.MAX_SCANNED) {
+            // The local database already keeps the beginning of the chat.
+            return;
+        }
+        remoteStarted = true;
+        remoteBuilder = new DeltaGramChatStats.Builder(
+                UserConfig.getInstance(getCurrentAccount()).clientUserId, dialogId);
+        remoteBuilder.stats.fromServer = true;
+        oldestLoadedId = 0;
+        pagesSinceRender = 0;
+        pagesLoaded = 0;
+        setProgress(progressText());
+        requestHistoryPage();
+    }
+
+    private void requestHistoryPage() {
+        if (remoteDone || remoteStopped || getParentActivity() == null) {
+            return;
+        }
+        final TLRPC.InputPeer peer = getMessagesController().getInputPeer(dialogId);
+        if (peer == null) {
+            finishHistoryLoad("История недоступна");
+            return;
+        }
+        final TLRPC.TL_messages_getHistory request = new TLRPC.TL_messages_getHistory();
+        request.peer = peer;
+        request.limit = 100;
+        request.offset_id = oldestLoadedId;
+        getConnectionsManager().sendRequest(request, (response, error) -> {
+            if (remoteStopped || getParentActivity() == null) {
+                return;
+            }
+            if (error != null) {
+                if (error.text != null && error.text.startsWith("FLOOD_WAIT_") && floodRetries < 4) {
+                    int seconds = 5;
+                    try {
+                        seconds = Integer.parseInt(error.text.substring("FLOOD_WAIT_".length()));
+                    } catch (Exception ignore) {
+                    }
+                    floodRetries++;
+                    final int delay = Math.min(Math.max(seconds, 1), 60);
+                    setProgress("Сервер просит подождать " + delay + " с…");
+                    AndroidUtilities.runOnUIThread(this::requestHistoryPage, delay * 1000L + 300L);
+                    return;
+                }
+                finishHistoryLoad("Не удалось загрузить историю");
+                return;
+            }
+            if (!(response instanceof TLRPC.messages_Messages)) {
+                finishHistoryLoad("Не удалось загрузить историю");
+                return;
+            }
+            final TLRPC.messages_Messages result = (TLRPC.messages_Messages) response;
+            if (!result.users.isEmpty()) {
+                getMessagesController().putUsers(result.users, false);
+            }
+            if (!result.chats.isEmpty()) {
+                getMessagesController().putChats(result.chats, false);
+            }
+
+            int added = 0;
+            int pageOldestId = 0;
+            for (int i = 0; i < result.messages.size(); i++) {
+                final TLRPC.Message message = result.messages.get(i);
+                if (message == null || message.date <= 0 || message.id <= 0) {
+                    continue;
+                }
+                remoteBuilder.add(message, message.date);
+                added++;
+                pageOldestId = message.id;
+            }
+            remoteStats = remoteBuilder.build();
+            if (result.count > remoteStats.totalMessages) {
+                remoteStats.totalMessages = result.count;
+            }
+            if (added == 0) {
+                finishHistoryLoad(null);
+                return;
+            }
+            if (pageOldestId != 0) {
+                oldestLoadedId = pageOldestId;
+            }
+            floodRetries = 0;
+            pagesLoaded++;
+            stats = remoteStats;
+            updateHeroLive();
+            pagesSinceRender++;
+            if (pagesSinceRender >= 5 || heroCountView == null) {
+                rebuildPreservingScroll();
+                pagesSinceRender = 0;
+            }
+            setProgress(progressText());
+
+            if (added == 0 || oldestLoadedId <= 1
+                    || remoteStats.scannedMessages >= DeltaGramChatStats.MAX_SCANNED
+                    || (result.count > 0 && remoteStats.scannedMessages >= result.count)
+                    || pagesLoaded >= 200) {
+                finishHistoryLoad(null);
+                return;
+            }
+            AndroidUtilities.runOnUIThread(this::requestHistoryPage, 350);
+        });
+    }
+
+    private void finishHistoryLoad(String note) {
+        remoteDone = true;
+        if (note != null) {
+            historyStatus = note;
+        }
+        if (remoteStats != null && remoteStats.scannedMessages > 0) {
+            stats = remoteStats;
+            stats.truncated = stats.totalMessages > stats.scannedMessages;
+            if (sCache.size() > 20) {
+                sCache.clear();
+                sCacheTime.clear();
+            }
+            sCache.put(dialogId, remoteStats);
+            sCacheTime.put(dialogId, System.currentTimeMillis());
+        }
+        if (getParentActivity() == null) {
+            return;
+        }
+        rebuildPreservingScroll();
+        setProgress(progressText());
+    }
+
+    private void rebuildPreservingScroll() {
+        final int scrollY = scrollView != null ? scrollView.getScrollY() : 0;
+        buildContent();
+        if (scrollView != null) {
+            scrollView.post(() -> scrollView.scrollTo(0, scrollY));
+        }
+    }
+
+    private void updateHeroLive() {
+        if (heroCountView != null && stats != null) {
+            heroCountView.setText(formatNumber(stats.scannedMessages));
+        }
+        if (heroPeriodView != null) {
+            heroPeriodView.setText(periodText());
+        }
+    }
+
+    private void setProgress(String text) {
+        if (progressView != null) {
+            progressView.setText(text);
+            progressView.setVisibility(TextUtils.isEmpty(text) ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    private String progressText() {
+        if (historyStatus != null) {
+            return historyStatus;
+        }
+        if (remoteDone) {
+            if (remoteStats != null && remoteStats.scannedMessages > 0) {
+                return "Учтено " + formatNumber(remoteStats.scannedMessages) + " сообщений истории";
+            }
+            return "";
+        }
+        if (remoteStats != null) {
+            return "Загружаем историю… уже " + formatNumber(remoteStats.scannedMessages) + " сообщений";
+        }
+        if (remoteStarted) {
+            return "Загружаем историю чата…";
+        }
+        return "";
+    }
+
+    @Override
+    public void onFragmentDestroy() {
+        remoteStopped = true;
+        super.onFragmentDestroy();
     }
 
     /* ------------------------------------------------------------------ */
@@ -148,11 +368,18 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
         contentView.removeAllViews();
         if (stats == null || stats.scannedMessages == 0) {
             final TextView empty = new TextView(getParentActivity());
-            empty.setText("Пока нечего считать — в этом чате нет сохранённых сообщений.");
+            if (historyStatus != null) {
+                empty.setText(historyStatus);
+            } else if (remoteStarted && !remoteDone) {
+                empty.setText("Загружаем историю чата…");
+            } else {
+                empty.setText("Пока нечего считать — в этом чате нет сохранённых сообщений.");
+            }
             empty.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
             empty.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             empty.setPadding(dp(8), dp(40), dp(8), dp(8));
             contentView.addView(empty);
+            progressView = empty;
             return;
         }
         addHero();
@@ -193,16 +420,20 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
         hero.addView(name);
 
         final TextView total = new TextView(context);
-        total.setText(formatNumber(stats.totalMessages));
+        total.setText(formatNumber(stats.scannedMessages));
         total.setTextColor(Color.WHITE);
         total.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 42);
         total.setTypeface(AndroidUtilities.bold());
         hero.addView(total);
+        heroCountView = total;
 
         final TextView totalLabel = new TextView(context);
-        totalLabel.setText(stats.truncated
-                ? "сообщений • учтено " + formatNumber(stats.scannedMessages)
-                : "сообщений");
+        String label = "сообщений";
+        if (stats.totalMessages > stats.scannedMessages) {
+            label += (stats.fromServer ? " • всего в чате " : " • в базе ")
+                    + formatNumber(stats.totalMessages);
+        }
+        totalLabel.setText(label);
         totalLabel.setTextColor(0xCCFFFFFF);
         totalLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         hero.addView(totalLabel);
@@ -213,6 +444,15 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
         period.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         period.setPadding(0, dp(10), 0, 0);
         hero.addView(period);
+        heroPeriodView = period;
+
+        progressView = new TextView(context);
+        progressView.setText(progressText());
+        progressView.setTextColor(0x99FFFFFF);
+        progressView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+        progressView.setPadding(0, dp(8), 0, 0);
+        progressView.setVisibility(TextUtils.isEmpty(progressText()) ? View.GONE : View.VISIBLE);
+        hero.addView(progressView);
 
         contentView.addView(hero, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -352,7 +592,7 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
         card.addView(range);
 
         final TextView who = new TextView(getParentActivity());
-        who.setText("Первым написал(а): " + nameForSender(stats.longestPauseSecondSenderId));
+        who.setText("Последним перед паузой писал(а): " + nameForSender(stats.longestPauseFirstSenderId));
         who.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         who.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         who.setPadding(0, dp(6), 0, 0);
@@ -436,7 +676,7 @@ public class DeltaGramChatStatsActivity extends BaseFragment {
             drawEllipsized(canvas, dialogTitle, 72, 250, width - 144, paint);
 
             paint.setTextSize(190);
-            canvas.drawText(formatNumber(stats.totalMessages), 72, 480, paint);
+            canvas.drawText(formatNumber(stats.scannedMessages), 72, 480, paint);
 
             paint.setTextSize(40);
             paint.setColor(0xFFB9D4EA);
