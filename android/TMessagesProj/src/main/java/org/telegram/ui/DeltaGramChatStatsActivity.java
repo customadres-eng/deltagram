@@ -31,6 +31,7 @@ import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DeltaGramChatStats;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
