@@ -102,6 +102,20 @@ public final class DeltamentPluginManager {
         }
     }
 
+    /** Unloads everything, rescans and loads the enabled plugins again. */
+    public synchronized void reload() {
+        for (DeltamentPluginInfo info : new ArrayList<>(plugins)) {
+            unload(info);
+        }
+        rescan();
+        for (DeltamentPluginInfo info : new ArrayList<>(plugins)) {
+            if (info.enabled) {
+                load(info);
+            }
+        }
+        notifyChanged();
+    }
+
     public synchronized void rescan() {
         plugins.clear();
         final File[] files = getPluginsDir().listFiles();

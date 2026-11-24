@@ -2,9 +2,12 @@ package org.telegram.ui;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -20,6 +23,7 @@ import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -37,6 +41,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Switch;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
 import org.telegram.ui.Cells.AppIconsSelectorCell;
+import org.telegram.ui.Plugins.DeltaGramBackup;
 import org.telegram.ui.Plugins.DeltamentPluginsActivity;
 import org.telegram.ui.Stars.DeltamentBubbleSkins;
 import org.telegram.ui.Stars.DeltamentProfileMusic;
@@ -62,6 +67,8 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     public static final int PAGE_OTHER = 5;
 
     private static final String EXTRA_PAGE = "deltagram_page";
+    private static final int REQUEST_EXPORT = 7419;
+    private static final int REQUEST_IMPORT = 7420;
 
     private final int currentAccount = UserConfig.selectedAccount;
     private int page;
@@ -282,6 +289,120 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                 "Открыть настройки размера текста Telegram",
                 currentTextSizeLabel(), R.drawable.msg_edit, v ->
                         presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_BASIC)));
+
+        content.addView(section("Резервная копия"));
+        addAction(content, "Экспорт настроек",
+                "Один файл: все тумблеры DeltaGram, настройки плагинов и сами плагины",
+                null, R.drawable.msg_download, v -> exportSettings());
+        addAction(content, "Импорт настроек",
+                "Восстановить тумблеры и плагины из файла резервной копии",
+                null, R.drawable.msg_sendfile, v -> confirmImport());
+    }
+
+    // ------------------------------------------------------------- backup
+
+    private void exportSettings() {
+        final Activity activity = getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        try {
+            final Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            intent.putExtra(Intent.EXTRA_TITLE, DeltaGramBackup.suggestedFileName());
+            activity.startActivityForResult(intent, REQUEST_EXPORT);
+        } catch (Throwable e) {
+            showBackupError("Не удалось открыть сохранение файла", e);
+        }
+    }
+
+    private void confirmImport() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Импортировать настройки?");
+        builder.setMessage("Текущие настройки DeltaGram, настройки плагинов и установленные плагины будут "
+                + "заменены данными из файла. Аккаунт, чаты и карты не затрагиваются.");
+        builder.setPositiveButton("Импортировать", (dialog, which) -> pickBackupFile());
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void pickBackupFile() {
+        final Activity activity = getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        try {
+            final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("*/*");
+            activity.startActivityForResult(intent, REQUEST_IMPORT);
+        } catch (Throwable e) {
+            showBackupError("Не удалось открыть файл", e);
+        }
+    }
+
+    @Override
+    public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        final Uri uri = data.getData();
+        final Context appContext = ApplicationLoader.applicationContext;
+        if (appContext == null) {
+            return;
+        }
+        if (requestCode == REQUEST_EXPORT) {
+            new Thread(() -> {
+                try {
+                    DeltaGramBackup.exportTo(appContext, uri);
+                    AndroidUtilities.runOnUIThread(() -> {
+                        if (getParentActivity() != null) {
+                            BulletinFactory.of(this).createSimpleBulletin(R.raw.info,
+                                    "Настройки DeltaGram сохранены в файл").show();
+                        }
+                    });
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                    AndroidUtilities.runOnUIThread(() -> showBackupError("Не удалось сохранить копию", e));
+                }
+            }, "dg-backup-export").start();
+        } else if (requestCode == REQUEST_IMPORT) {
+            new Thread(() -> {
+                try {
+                    final DeltaGramBackup.Result result = DeltaGramBackup.importFrom(appContext, uri);
+                    AndroidUtilities.runOnUIThread(() -> {
+                        if (getParentActivity() == null) {
+                            return;
+                        }
+                        final String message = "Импортировано: " + result.preferenceCount + " настроек, "
+                                + result.pluginCount + " плагинов"
+                                + (result.pluginSettings > 0 ? ", " + result.pluginSettings + " наборов настроек плагинов" : "")
+                                + (result.skippedPlugins.isEmpty() ? "" : ". Пропущено: " + result.skippedPlugins.size());
+                        BulletinFactory.of(this).createSimpleBulletin(R.raw.info, message).show();
+                        presentFragment(new DeltaGramSettingsActivity(PAGE_GENERAL), true);
+                    });
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                    AndroidUtilities.runOnUIThread(() -> showBackupError("Не удалось импортировать настройки", e));
+                }
+            }, "dg-backup-import").start();
+        }
+    }
+
+    private void showBackupError(String title, Throwable e) {
+        if (getParentActivity() == null) {
+            return;
+        }
+        String message = e == null ? null : e.getMessage();
+        if (TextUtils.isEmpty(message)) {
+            message = e == null ? "Неизвестная ошибка" : e.getClass().getSimpleName();
+        }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle(title);
+        builder.setMessage(message);
+        builder.setPositiveButton("Ок", null);
+        builder.show();
     }
 
     private void buildAppearance(LinearLayout content) {
