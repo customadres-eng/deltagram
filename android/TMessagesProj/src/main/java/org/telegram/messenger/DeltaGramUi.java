@@ -1,5 +1,6 @@
 package org.telegram.messenger;
 
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.text.format.DateFormat;
@@ -38,7 +39,9 @@ public final class DeltaGramUi {
     }
 
     public static SharedPreferences prefs() {
-        return MessagesController.getGlobalMainSettings();
+        // Read "mainconfig" directly: this helper is also used while LocaleController
+        // is being constructed, when MessagesController.getInstance(0) must not be touched.
+        return ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Context.MODE_PRIVATE);
     }
 
     /* ------------------------------------------------------------------ */
