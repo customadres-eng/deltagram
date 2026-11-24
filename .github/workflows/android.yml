@@ -43,12 +43,27 @@ jobs:
           sudo apt-get install -y -qq ccache
           ccache --version | head -n 1
       - name: Restore ccache
-        uses: actions/cache@v4
+        id: ccache-restore
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
           key: ccache-${{ runner.os }}-${{ hashFiles('android/TMessagesProj/jni/**', 'android/TMessagesProj/build.gradle') }}
           restore-keys: |
             ccache-${{ runner.os }}-
+      - name: Restore compiled classes
+        id: classes-restore
+        uses: actions/cache/restore@v4
+        with:
+          # Class output + javac's incremental state + buildSrc. Restoring both
+          # lets javac recompile only changed files instead of the whole module.
+          path: |
+            android/TMessagesProj/build/intermediates/javac
+            android/TMessagesProj/build/tmp/compileDebugJavaWithJavac
+            android/TMessagesProj/build/classes
+            android/buildSrc/build
+          key: classes-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            classes-${{ runner.os }}-
       - name: Create CI debug keystore
         working-directory: android
         run: |
@@ -61,8 +76,29 @@ jobs:
             -PdgCcache \
             -Dorg.gradle.workers.max=4
       - name: ccache stats
+        if: always()
         run: ccache --show-stats || true
       - uses: actions/upload-artifact@v4
         with:
           name: DeltaGram-debug
           path: android/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+      - name: Save ccache
+        # actions/cache skips its save step when the job fails, which is why
+        # the first failed run left the cache empty. Save it no matter what.
+        if: always() && steps.ccache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('android/TMessagesProj/jni/**', 'android/TMessagesProj/build.gradle') }}
+      - name: Save compiled classes
+        # A fresh key every run, restored through the prefix, so the cache
+        # always reflects the latest commit.
+        if: always() && steps.classes-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            android/TMessagesProj/build/intermediates/javac
+            android/TMessagesProj/build/tmp/compileDebugJavaWithJavac
+            android/TMessagesProj/build/classes
+            android/buildSrc/build
+          key: classes-${{ runner.os }}-${{ github.run_id }}
